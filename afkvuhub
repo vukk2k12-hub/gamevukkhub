@@ -1,0 +1,79 @@
+--// LocalScript - StarterPlayerScripts hoặc StarterGui
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+-- GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BaconPremiumUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 250, 0, 120)
+MainFrame.Position = UDim2.new(0.7, 0, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(135, 206, 235) -- Sky Blue
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true -- để drag
+MainFrame.Draggable = true -- Roblox hỗ trợ kéo bằng chuột/cảm ứng
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 10)
+UICorner.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundTransparency = 1
+Title.Text = "vuhub afk"
+Title.TextColor3 = Color3.fromRGB(0, 0, 0)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 22
+Title.Parent = MainFrame
+
+local AFKButton = Instance.new("TextButton")
+AFKButton.Size = UDim2.new(0.9, 0, 0, 40)
+AFKButton.Position = UDim2.new(0.05, 0, 0.5, 0)
+AFKButton.Text = "AFK: OFF"
+AFKButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+AFKButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+AFKButton.Font = Enum.Font.SourceSansBold
+AFKButton.TextSize = 20
+AFKButton.Parent = MainFrame
+
+local UICornerBtn = Instance.new("UICorner")
+UICornerBtn.CornerRadius = UDim.new(0, 8)
+UICornerBtn.Parent = AFKButton
+
+-- Hover effect
+AFKButton.MouseEnter:Connect(function()
+	AFKButton.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+end)
+AFKButton.MouseLeave:Connect(function()
+	AFKButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+end)
+
+-- AFK logic
+local AFK = false
+local connection
+
+AFKButton.MouseButton1Click:Connect(function()
+	AFK = not AFK
+	if AFK then
+		AFKButton.Text = "AFK: ON"
+		-- Bắt đầu fake activity để tránh bị kick
+		connection = RunService.Heartbeat:Connect(function()
+			-- Giả lập nhấn phím Jump (nhân vật không nhảy thật, nhưng Roblox tính là hoạt động)
+			game:GetService("VirtualUser"):CaptureController()
+			game:GetService("VirtualUser"):ClickButton2(Vector2.new())
+		end)
+	else
+		AFKButton.Text = "AFK: OFF"
+		if connection then
+			connection:Disconnect()
+			connection = nil
+		end
+	end
+end)
