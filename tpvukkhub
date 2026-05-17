@@ -1,0 +1,803 @@
+local player = game.Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0,260,0,320)
+Frame.Position = UDim2.new(0.5,-130,0.5,-160)
+Frame.BackgroundColor3 = Color3.fromRGB(135,206,250)
+Frame.Active = true
+Frame.Parent = ScreenGui
+Instance.new("UICorner",Frame)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1,0,0,30)
+Title.BackgroundTransparency = 1
+Title.Text = "Teleport Menu"
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 20
+Title.TextColor3 = Color3.new(0,0,0)
+Title.Parent = Frame
+
+local Close = Instance.new("TextButton")
+Close.Size = UDim2.new(0,25,0,25)
+Close.Position = UDim2.new(1,-30,0,3)
+Close.Text = "X"
+Close.TextColor3 = Color3.new(0,0,0)
+Close.BackgroundColor3 = Color3.fromRGB(255,255,255)
+Close.Parent = Frame
+Instance.new("UICorner",Close)
+
+local OpenButton = Instance.new("TextButton")
+OpenButton.Size = UDim2.new(0,50,0,50)
+OpenButton.Position = UDim2.new(1,-60,0,200)
+OpenButton.Text = "≡"
+OpenButton.TextSize = 22
+OpenButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
+OpenButton.TextColor3 = Color3.new(0,0,0)
+OpenButton.Visible = false
+OpenButton.Parent = ScreenGui
+Instance.new("UICorner",OpenButton)
+
+Close.MouseButton1Click:Connect(function()
+	Frame.Visible=false
+	OpenButton.Visible=true
+end)
+
+OpenButton.MouseButton1Click:Connect(function()
+	Frame.Visible=true
+	OpenButton.Visible=false
+end)
+
+local dragging=false
+local dragInput
+local dragStart
+local startPos
+
+OpenButton.InputBegan:Connect(function(input)
+	if input.UserInputType==Enum.UserInputType.Touch then
+		dragging=true
+		dragStart=input.Position
+		startPos=OpenButton.Position
+	end
+end)
+
+OpenButton.InputChanged:Connect(function(input)
+	if input.UserInputType==Enum.UserInputType.Touch then
+		dragInput=input
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if input==dragInput and dragging then
+		local delta=input.Position-dragStart
+		OpenButton.Position=UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset+delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset+delta.Y
+		)
+	end
+end)
+
+local dragging2=false
+local dragInput2
+local dragStart2
+local startPos2
+
+local function update(input)
+	local delta=input.Position-dragStart2
+	Frame.Position=UDim2.new(
+		startPos2.X.Scale,startPos2.X.Offset+delta.X,
+		startPos2.Y.Scale,startPos2.Y.Offset+delta.Y
+	)
+end
+
+Frame.InputBegan:Connect(function(input)
+	if input.UserInputType==Enum.UserInputType.Touch then
+		dragging2=true
+		dragStart2=input.Position
+		startPos2=Frame.Position
+	end
+end)
+
+Frame.InputChanged:Connect(function(input)
+	if input.UserInputType==Enum.UserInputType.Touch then
+		dragInput2=input
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if input==dragInput2 and dragging2 then
+		update(input)
+	end
+end)
+
+local TabBar=Instance.new("Frame")
+TabBar.Size=UDim2.new(1,0,0,35)
+TabBar.Position=UDim2.new(0,0,0,30)
+TabBar.BackgroundTransparency=1
+TabBar.Parent=Frame
+
+local function makeTab(text,pos)
+	local b=Instance.new("TextButton")
+	b.Size=UDim2.new(0.5,-6,0,30)
+	b.Position=UDim2.new(pos,pos==0 and 5 or -5,0,2)
+	b.BackgroundColor3=Color3.fromRGB(255,255,255)
+	b.TextColor3=Color3.new(0,0,0)
+	b.Text=text
+	b.Parent=TabBar
+	Instance.new("UICorner",b)
+	return b
+end
+
+local TabTP=makeTab("TP",0)
+local TabSetting=makeTab("Setting",0.5)
+
+local TPFrame=Instance.new("Frame")
+TPFrame.Size=UDim2.new(1,0,1,-70)
+TPFrame.Position=UDim2.new(0,0,0,65)
+TPFrame.BackgroundTransparency=1
+TPFrame.Parent=Frame
+
+local SettingFrame=TPFrame:Clone()
+SettingFrame.Visible=false
+SettingFrame.Parent=Frame
+
+TabTP.MouseButton1Click:Connect(function()
+	TPFrame.Visible=true
+	SettingFrame.Visible=false
+end)
+
+TabSetting.MouseButton1Click:Connect(function()
+	TPFrame.Visible=false
+	SettingFrame.Visible=true
+end)
+
+local MiniFrame=Instance.new("Frame")
+MiniFrame.Size=UDim2.new(0,150,0,120)
+MiniFrame.Position=UDim2.new(1,-155,0,-5)
+MiniFrame.BackgroundColor3=Color3.fromRGB(135,206,250)
+MiniFrame.Parent=ScreenGui
+Instance.new("UICorner",MiniFrame)
+
+local MiniScroll=Instance.new("ScrollingFrame")
+MiniScroll.Size=UDim2.new(1,-6,1,-6)
+MiniScroll.Position=UDim2.new(0,3,0,3)
+MiniScroll.BackgroundTransparency=1
+MiniScroll.ScrollBarThickness=4
+MiniScroll.Parent=MiniFrame
+
+local MiniLayout=Instance.new("UIListLayout")
+MiniLayout.Padding=UDim.new(0,2)
+MiniLayout.Parent=MiniScroll
+
+MiniLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	MiniScroll.CanvasSize=UDim2.new(0,0,0,MiniLayout.AbsoluteContentSize.Y)
+end)
+
+local TopBar=Instance.new("Frame")
+TopBar.Size=UDim2.new(1,0,0,40)
+TopBar.BackgroundTransparency=1
+TopBar.Parent=TPFrame
+
+local Create=Instance.new("TextButton")
+Create.Size=UDim2.new(0.5,-5,0,35)
+Create.Position=UDim2.new(0,5,0,2)
+Create.Text="Tạo"
+Create.BackgroundColor3=Color3.fromRGB(255,255,255)
+Create.TextColor3=Color3.new(0,0,0)
+Create.Parent=TopBar
+Instance.new("UICorner",Create)
+
+local DeleteAll=Instance.new("TextButton")
+DeleteAll.Size=UDim2.new(0.5,-5,0,35)
+DeleteAll.Position=UDim2.new(0.5,0,0,2)
+DeleteAll.Text="Delete All"
+DeleteAll.BackgroundColor3=Color3.fromRGB(255,255,255)
+DeleteAll.TextColor3=Color3.new(0,0,0)
+DeleteAll.Parent=TopBar
+Instance.new("UICorner",DeleteAll)
+
+local List=Instance.new("ScrollingFrame")
+List.Size=UDim2.new(1,-10,1,-50)
+List.Position=UDim2.new(0,5,0,45)
+List.BackgroundTransparency=1
+List.ScrollBarThickness=6
+List.Parent=TPFrame
+
+local Layout=Instance.new("UIListLayout")
+Layout.Padding=UDim.new(0,5)
+Layout.Parent=List
+
+Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	List.CanvasSize=UDim2.new(0,0,0,Layout.AbsoluteContentSize.Y)
+end)
+
+local tpVehicle=false
+
+local VehicleToggle=Instance.new("TextButton")
+VehicleToggle.Size=UDim2.new(0,180,0,40)
+VehicleToggle.Position=UDim2.new(0.5,-90,0,20)
+VehicleToggle.BackgroundColor3=Color3.fromRGB(255,255,255)
+VehicleToggle.TextColor3=Color3.new(0,0,0)
+VehicleToggle.Text="TP Xe : OFF"
+VehicleToggle.Parent=SettingFrame
+Instance.new("UICorner",VehicleToggle)
+
+VehicleToggle.MouseButton1Click:Connect(function()
+	tpVehicle=not tpVehicle
+	VehicleToggle.Text="TP Xe : "..(tpVehicle and "ON" or "OFF")
+end)
+
+local MiniToggle=Instance.new("TextButton")
+MiniToggle.Size=UDim2.new(0,180,0,40)
+MiniToggle.Position=UDim2.new(0.5,-90,0,80)
+MiniToggle.BackgroundColor3=Color3.fromRGB(255,255,255)
+MiniToggle.TextColor3=Color3.new(0,0,0)
+MiniToggle.Text="Mini GUI : ON"
+MiniToggle.Parent=SettingFrame
+Instance.new("UICorner",MiniToggle)
+
+MiniToggle.MouseButton1Click:Connect(function()
+	MiniFrame.Visible=not MiniFrame.Visible
+	MiniToggle.Text="Mini GUI : "..(MiniFrame.Visible and "ON" or "OFF")
+end)
+
+local draggingMini=false
+local dragInputMini
+local dragStartMini
+local startPosMini
+
+local function updateMini(input)
+	local delta=input.Position-dragStartMini
+	MiniFrame.Position=UDim2.new(
+		startPosMini.X.Scale,
+		startPosMini.X.Offset+delta.X,
+		startPosMini.Y.Scale,
+		startPosMini.Y.Offset+delta.Y
+	)
+end
+
+MiniFrame.InputBegan:Connect(function(input)
+	if input.UserInputType==Enum.UserInputType.Touch then
+		draggingMini=true
+		dragStartMini=input.Position
+		startPosMini=MiniFrame.Position
+	end
+end)
+
+MiniFrame.InputChanged:Connect(function(input)
+	if input.UserInputType==Enum.UserInputType.Touch then
+		dragInputMini=input
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if input==dragInputMini and draggingMini then
+		updateMini(input)
+	end
+end)
+
+local function teleport(pos)
+	local char=player.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+	local hrp=char.HumanoidRootPart
+
+	if tpVehicle then
+		for _,v in pairs(workspace:GetDescendants()) do
+			if (v:IsA("Seat") or v:IsA("VehicleSeat")) and v.Occupant==char:FindFirstChildOfClass("Humanoid") then
+				v.CFrame=CFrame.new(pos)
+				return
+			end
+		end
+	end
+
+	hrp.CFrame=CFrame.new(pos)
+end
+
+local function createSlot()
+
+	local data={pos=nil}
+
+	local Row=Instance.new("Frame")
+	Row.Size=UDim2.new(1,0,0,40)
+	Row.BackgroundTransparency=1
+	Row.Parent=List
+
+	local RowLayout=Instance.new("UIListLayout")
+	RowLayout.FillDirection=Enum.FillDirection.Horizontal
+	RowLayout.Padding=UDim.new(0,5)
+	RowLayout.Parent=Row
+
+	local Name=Instance.new("TextBox")
+	Name.Size=UDim2.new(0,80,0,35)
+	Name.PlaceholderText="Name"
+	Name.BackgroundColor3=Color3.fromRGB(255,255,255)
+	Name.Parent=Row
+	Instance.new("UICorner",Name)
+
+	local TP=Instance.new("TextButton")
+	TP.Size=UDim2.new(0,40,0,35)
+	TP.Text="TP"
+	TP.BackgroundColor3=Color3.fromRGB(255,255,255)
+	TP.Parent=Row
+	Instance.new("UICorner",TP)
+
+	local Save=Instance.new("TextButton")
+	Save.Size=UDim2.new(0,40,0,35)
+	Save.Text="Save"
+	Save.BackgroundColor3=Color3.fromRGB(255,255,255)
+	Save.Parent=Row
+	Instance.new("UICorner",Save)
+
+	local Delete=Instance.new("TextButton")
+	Delete.Size=UDim2.new(0,50,0,35)
+	Delete.Text="Delete"
+	Delete.BackgroundColor3=Color3.fromRGB(255,255,255)
+	Delete.Parent=Row
+	Instance.new("UICorner",Delete)
+
+	local MiniRow=Instance.new("Frame")
+	MiniRow.Size=UDim2.new(1,0,0,22)
+	MiniRow.BackgroundTransparency=1
+	MiniRow.Parent=MiniScroll
+
+	local MiniRowLayout=Instance.new("UIListLayout")
+	MiniRowLayout.FillDirection=Enum.FillDirection.Horizontal
+	MiniRowLayout.Padding=UDim.new(0,2)
+	MiniRowLayout.Parent=MiniRow
+
+	local MiniName=Instance.new("TextBox")
+	MiniName.Size=UDim2.new(0.45,0,1,0)
+	MiniName.TextSize=10
+	MiniName.PlaceholderText="Name"
+	MiniName.BackgroundColor3=Color3.fromRGB(255,255,255)
+	MiniName.Parent=MiniRow
+	Instance.new("UICorner",MiniName)
+
+	local MiniTP=Instance.new("TextButton")
+	MiniTP.Size=UDim2.new(0.25,0,1,0)
+	MiniTP.Text="TP"
+	MiniTP.TextSize=10
+	MiniTP.BackgroundColor3=Color3.fromRGB(255,255,255)
+	MiniTP.Parent=MiniRow
+	Instance.new("UICorner",MiniTP)
+
+	local MiniSave=Instance.new("TextButton")
+	MiniSave.Size=UDim2.new(0.3,0,1,0)
+	MiniSave.Text="Save"
+	MiniSave.TextSize=10
+	MiniSave.BackgroundColor3=Color3.fromRGB(255,255,255)
+	MiniSave.Parent=MiniRow
+	Instance.new("UICorner",MiniSave)
+
+	Name:GetPropertyChangedSignal("Text"):Connect(function()
+		MiniName.Text = Name.Text
+	end)
+
+	MiniName:GetPropertyChangedSignal("Text"):Connect(function()
+		Name.Text = MiniName.Text
+	end)
+
+	local function save()
+		local char=player.Character
+		if char and char:FindFirstChild("HumanoidRootPart") then
+			data.pos=char.HumanoidRootPart.Position
+		end
+	end
+
+	Save.MouseButton1Click:Connect(save)
+	MiniSave.MouseButton1Click:Connect(save)
+
+	local function tp()
+		if data.pos then
+			teleport(data.pos)
+		end
+	end
+
+	TP.MouseButton1Click:Connect(tp)
+	MiniTP.MouseButton1Click:Connect(tp)
+
+	Delete.MouseButton1Click:Connect(function()
+		Row:Destroy()
+		MiniRow:Destroy()
+	end)
+
+end
+
+Create.MouseButton1Click:Connect(createSlot)
+
+DeleteAll.MouseButton1Click:Connect(function()
+
+	for _,v in pairs(List:GetChildren()) do
+		if v:IsA("Frame") then v:Destroy() end
+	end
+
+	for _,v in pairs(MiniScroll:GetChildren()) do
+		if v:IsA("Frame") then v:Destroy() end
+	end
+
+end)
+--//====================================================
+--// TAB 3 CONFIG FULL - FIX LOAD TP HOẠT ĐỘNG
+--// DÁN XUỐNG CUỐI SCRIPT GỐC
+--//====================================================
+
+local HttpService = game:GetService("HttpService")
+
+local isfile = isfile or function() return false end
+local readfile = readfile or function() return "" end
+local writefile = writefile or function() end
+local makefolder = makefolder or function() end
+local isfolder = isfolder or function() return false end
+
+local Folder = "TPMenuConfig"
+local File = Folder.."/configs.json"
+
+pcall(function()
+	if not isfolder(Folder) then
+		makefolder(Folder)
+	end
+end)
+
+--====================================================
+-- PATCH CREATE SLOT
+--====================================================
+
+local oldCreateSlot = createSlot
+
+createSlot = function(loadData)
+
+	oldCreateSlot()
+
+	local row
+
+	for _,v in pairs(List:GetChildren()) do
+		if v:IsA("Frame") then
+			row = v
+		end
+	end
+
+	if not row then return end
+
+	-- SavedPos
+	if not row:FindFirstChild("SavedPos") then
+		local val = Instance.new("Vector3Value")
+		val.Name = "SavedPos"
+		val.Parent = row
+	end
+
+	-- save button lưu vị trí
+	for _,obj in pairs(row:GetChildren()) do
+		if obj:IsA("TextButton") and obj.Text == "Save" then
+			obj.MouseButton1Click:Connect(function()
+				local char = player.Character
+				if char and char:FindFirstChild("HumanoidRootPart") then
+					row.SavedPos.Value =
+						char.HumanoidRootPart.Position
+				end
+			end)
+		end
+	end
+
+	-- load data config
+	if loadData then
+
+		local pos = nil
+
+		for _,obj in pairs(row:GetChildren()) do
+			if obj:IsA("TextBox") then
+				obj.Text = loadData.name or ""
+				break
+			end
+		end
+
+		if loadData.pos then
+			pos = Vector3.new(
+				loadData.pos.x,
+				loadData.pos.y,
+				loadData.pos.z
+			)
+
+			row.SavedPos.Value = pos
+		end
+
+		-- bind lại nút TP
+		if pos then
+			for _,obj in pairs(row:GetChildren()) do
+				if obj:IsA("TextButton") and obj.Text == "TP" then
+					obj.MouseButton1Click:Connect(function()
+						teleport(pos)
+					end)
+				end
+			end
+		end
+	end
+end
+
+--====================================================
+-- TAB CONFIG
+--====================================================
+
+local TabConfig = makeTab("Config",0.66)
+
+TabTP.Size = UDim2.new(0.33,-6,0,30)
+TabSetting.Size = UDim2.new(0.33,-6,0,30)
+TabConfig.Size = UDim2.new(0.33,-6,0,30)
+
+TabTP.Position = UDim2.new(0,5,0,2)
+TabSetting.Position = UDim2.new(0.33,0,0,2)
+TabConfig.Position = UDim2.new(0.66,-5,0,2)
+
+local ConfigFrame = TPFrame:Clone()
+ConfigFrame.Visible = false
+ConfigFrame.Parent = Frame
+
+TabTP.MouseButton1Click:Connect(function()
+	TPFrame.Visible = true
+	SettingFrame.Visible = false
+	ConfigFrame.Visible = false
+end)
+
+TabSetting.MouseButton1Click:Connect(function()
+	TPFrame.Visible = false
+	SettingFrame.Visible = true
+	ConfigFrame.Visible = false
+end)
+
+TabConfig.MouseButton1Click:Connect(function()
+	TPFrame.Visible = false
+	SettingFrame.Visible = false
+	ConfigFrame.Visible = true
+end)
+
+--====================================================
+-- TOP
+--====================================================
+
+local Top = Instance.new("Frame")
+Top.Size = UDim2.new(1,0,0,40)
+Top.BackgroundTransparency = 1
+Top.Parent = ConfigFrame
+
+local CreateConfig = Instance.new("TextButton")
+CreateConfig.Size = UDim2.new(0.5,-5,0,35)
+CreateConfig.Position = UDim2.new(0,5,0,2)
+CreateConfig.Text = "Tạo"
+CreateConfig.BackgroundColor3 = Color3.fromRGB(255,255,255)
+CreateConfig.TextColor3 = Color3.new(0,0,0)
+CreateConfig.Parent = Top
+Instance.new("UICorner",CreateConfig)
+
+local DeleteAllConfig = Instance.new("TextButton")
+DeleteAllConfig.Size = UDim2.new(0.5,-5,0,35)
+DeleteAllConfig.Position = UDim2.new(0.5,0,0,2)
+DeleteAllConfig.Text = "Delete All"
+DeleteAllConfig.BackgroundColor3 = Color3.fromRGB(255,255,255)
+DeleteAllConfig.TextColor3 = Color3.new(0,0,0)
+DeleteAllConfig.Parent = Top
+Instance.new("UICorner",DeleteAllConfig)
+
+--====================================================
+-- LIST
+--====================================================
+
+local ConfigList = Instance.new("ScrollingFrame")
+ConfigList.Size = UDim2.new(1,-10,1,-50)
+ConfigList.Position = UDim2.new(0,5,0,45)
+ConfigList.BackgroundTransparency = 1
+ConfigList.ScrollBarThickness = 6
+ConfigList.Parent = ConfigFrame
+
+local ConfigLayout = Instance.new("UIListLayout")
+ConfigLayout.Padding = UDim.new(0,5)
+ConfigLayout.Parent = ConfigList
+
+ConfigLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	ConfigList.CanvasSize = UDim2.new(0,0,0,ConfigLayout.AbsoluteContentSize.Y)
+end)
+
+--====================================================
+-- FILE
+--====================================================
+
+local function ReadData()
+	if not isfile(File) then
+		return {}
+	end
+
+	local ok,data = pcall(function()
+		return HttpService:JSONDecode(readfile(File))
+	end)
+
+	if ok and type(data) == "table" then
+		return data
+	end
+
+	return {}
+end
+
+local function SaveData(tbl)
+	writefile(File,HttpService:JSONEncode(tbl))
+end
+
+--====================================================
+-- GET TP SLOT
+--====================================================
+
+local function GetTPSlots()
+
+	local result = {}
+
+	for _,row in pairs(List:GetChildren()) do
+		if row:IsA("Frame") then
+
+			local slot = {
+				name = "",
+				pos = nil
+			}
+
+			for _,obj in pairs(row:GetChildren()) do
+				if obj:IsA("TextBox") then
+					slot.name = obj.Text
+					break
+				end
+			end
+
+			if row:FindFirstChild("SavedPos") then
+				local p = row.SavedPos.Value
+
+				slot.pos = {
+					x = p.X,
+					y = p.Y,
+					z = p.Z
+				}
+			end
+
+			table.insert(result,slot)
+		end
+	end
+
+	return result
+end
+
+--====================================================
+-- LOAD TP SLOT
+--====================================================
+
+local function LoadTPSlots(data)
+
+	for _,v in pairs(List:GetChildren()) do
+		if v:IsA("Frame") then
+			v:Destroy()
+		end
+	end
+
+	for _,v in pairs(MiniScroll:GetChildren()) do
+		if v:IsA("Frame") then
+			v:Destroy()
+		end
+	end
+
+	for _,slot in ipairs(data) do
+		createSlot(slot)
+	end
+end
+
+--====================================================
+-- CREATE CONFIG SLOT
+--====================================================
+
+local function CreateConfigSlot(defaultName)
+
+	local Row = Instance.new("Frame")
+	Row.Size = UDim2.new(1,0,0,40)
+	Row.BackgroundTransparency = 1
+	Row.Parent = ConfigList
+
+	local Lay = Instance.new("UIListLayout")
+	Lay.FillDirection = Enum.FillDirection.Horizontal
+	Lay.Padding = UDim.new(0,5)
+	Lay.Parent = Row
+
+	local Name = Instance.new("TextBox")
+	Name.Size = UDim2.new(0,80,0,35)
+	Name.Text = defaultName or ""
+	Name.PlaceholderText = "Name"
+	Name.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	Name.Parent = Row
+	Instance.new("UICorner",Name)
+
+	local Save = Instance.new("TextButton")
+	Save.Size = UDim2.new(0,40,0,35)
+	Save.Text = "Save"
+	Save.Parent = Row
+	Save.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	Instance.new("UICorner",Save)
+
+	local Load = Instance.new("TextButton")
+	Load.Size = UDim2.new(0,40,0,35)
+	Load.Text = "Load"
+	Load.Parent = Row
+	Load.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	Instance.new("UICorner",Load)
+
+	local Delete = Instance.new("TextButton")
+	Delete.Size = UDim2.new(0,50,0,35)
+	Delete.Text = "Delete"
+	Delete.Parent = Row
+	Delete.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	Instance.new("UICorner",Delete)
+
+	Save.MouseButton1Click:Connect(function()
+		if Name.Text == "" then return end
+
+		local all = ReadData()
+		all[Name.Text] = GetTPSlots()
+		SaveData(all)
+	end)
+
+	Load.MouseButton1Click:Connect(function()
+		local all = ReadData()
+
+		if all[Name.Text] then
+			LoadTPSlots(all[Name.Text])
+		end
+	end)
+
+	Delete.MouseButton1Click:Connect(function()
+		local all = ReadData()
+		all[Name.Text] = nil
+		SaveData(all)
+
+		Row:Destroy()
+	end)
+
+end
+
+--====================================================
+-- BUTTON
+--====================================================
+
+CreateConfig.MouseButton1Click:Connect(function()
+	CreateConfigSlot("")
+end)
+
+DeleteAllConfig.MouseButton1Click:Connect(function()
+
+	for _,v in pairs(ConfigList:GetChildren()) do
+		if v:IsA("Frame") then
+			v:Destroy()
+		end
+	end
+
+	SaveData({})
+end)
+
+--====================================================
+-- AUTO LOAD CONFIG SLOT
+--====================================================
+
+task.spawn(function()
+
+	local all = ReadData()
+
+	local names = {}
+
+	for name,_ in pairs(all) do
+		table.insert(names,name)
+	end
+
+	table.sort(names,function(a,b)
+		return tostring(a) < tostring(b)
+	end)
+
+	for _,name in ipairs(names) do
+		CreateConfigSlot(name)
+	end
+
+end)
