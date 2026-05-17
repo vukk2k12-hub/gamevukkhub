@@ -1,0 +1,207 @@
+-- Float Menu LocalScript
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+-- UI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "vuhub float"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 220, 0, 150)
+frame.Position = UDim2.new(0.05, 0, 0.2, 0)
+frame.BackgroundColor3 = Color3.fromRGB(173, 216, 230)
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+
+-- Title
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1,0,0,28)
+title.BackgroundTransparency = 1
+title.Text = "Float Menu"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextColor3 = Color3.new(0,0,0)
+title.Parent = frame
+
+-- Close button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0,22,0,22)
+closeBtn.Position = UDim2.new(1,-26,0,4)
+closeBtn.Text = "X"
+closeBtn.Font = Enum.Font.SourceSansBold
+closeBtn.TextSize = 14
+closeBtn.TextColor3 = Color3.new(1,1,1)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200,80,80)
+closeBtn.BorderSizePixel = 0
+closeBtn.Parent = frame
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(1, 0)
+
+-- Toggle button
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 140, 0, 36)
+toggleBtn.Position = UDim2.new(0.5, -70, 0.35, 0)
+toggleBtn.Text = "Float: OFF (3.5)"
+toggleBtn.Font = Enum.Font.Gotham
+toggleBtn.TextSize = 14
+toggleBtn.TextColor3 = Color3.new(0,0,0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(144, 200, 255)
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Parent = frame
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+
+-- +/- buttons
+local minusBtn = Instance.new("TextButton")
+minusBtn.Size = UDim2.new(0, 40, 0, 30)
+minusBtn.Position = UDim2.new(0.5, -90, 0.7, 0)
+minusBtn.Text = "-"
+minusBtn.Font = Enum.Font.GothamBold
+minusBtn.TextSize = 18
+minusBtn.BackgroundColor3 = Color3.fromRGB(255, 170, 170)
+minusBtn.BorderSizePixel = 0
+minusBtn.Parent = frame
+Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 6)
+
+local plusBtn = Instance.new("TextButton")
+plusBtn.Size = UDim2.new(0, 40, 0, 30)
+plusBtn.Position = UDim2.new(0.5, 50, 0.7, 0)
+plusBtn.Text = "+"
+plusBtn.Font = Enum.Font.GothamBold
+plusBtn.TextSize = 18
+plusBtn.BackgroundColor3 = Color3.fromRGB(170, 255, 170)
+plusBtn.BorderSizePixel = 0
+plusBtn.Parent = frame
+Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 6)
+
+-- Drag
+local dragging, dragInput, dragStart, startPos
+
+local function update(input)
+    local delta = input.Position - dragStart
+    frame.Position = UDim2.new(
+        startPos.X.Scale,
+        startPos.X.Offset + delta.X,
+        startPos.Y.Scale,
+        startPos.Y.Offset + delta.Y
+    )
+end
+
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement 
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
+
+-- Float logic
+local isFloating = false
+local floatOffset = 3.5
+local platform, keepUpdating
+
+local function updateUI()
+    toggleBtn.Text = "Float: " .. (isFloating and "ON" or "OFF") .. " (" .. floatOffset .. ")"
+end
+
+local function createPlatform()
+    if platform and platform.Parent then return end
+    platform = Instance.new("Part")
+    platform.Size = Vector3.new(10,1,10)
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.Transparency = 1
+    platform.Parent = workspace
+end
+
+local function enableFloat()
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    createPlatform()
+    keepUpdating = true
+
+    task.spawn(function()
+        while keepUpdating do
+            if not (platform and hrp and hrp.Parent) then break end
+            platform.Position = hrp.Position - Vector3.new(0, floatOffset, 0)
+            RunService.Heartbeat:Wait()
+        end
+    end)
+end
+
+local function disableFloat()
+    keepUpdating = false
+    if platform then
+        platform:Destroy()
+        platform = nil
+    end
+end
+
+-- Toggle
+toggleBtn.MouseButton1Click:Connect(function()
+    isFloating = not isFloating
+    if isFloating then
+        enableFloat()
+    else
+        disableFloat()
+    end
+    updateUI()
+end)
+
+-- +/- control
+minusBtn.MouseButton1Click:Connect(function()
+    floatOffset = math.max(0.5, floatOffset - 0.5)
+    updateUI()
+end)
+
+plusBtn.MouseButton1Click:Connect(function()
+    floatOffset = math.min(20, floatOffset + 0.5)
+    updateUI()
+end)
+
+-- Close
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+    disableFloat()
+end)
+
+-- Respawn handling
+player.CharacterRemoving:Connect(function()
+    disableFloat()
+end)
+
+player.CharacterAdded:Connect(function()
+    if isFloating then
+        task.wait(1)
+        enableFloat()
+    end
+end)
