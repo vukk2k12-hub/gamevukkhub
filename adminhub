@@ -1,0 +1,256 @@
+--// BOHUB ADMIN FULL SAVE
+
+-------------------------------------------------
+-- SERVICES
+-------------------------------------------------
+local Players = game:GetService("Players")
+local TextChatService = game:GetService("TextChatService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-------------------------------------------------
+-- FILE SAVE
+-------------------------------------------------
+local FILE = "adminhub.txt"
+local adminList = {}
+
+-- Load file
+pcall(function()
+	if readfile and isfile and isfile(FILE) then
+		for name in string.gmatch(readfile(FILE),"[^\n]+") do
+			adminList[name] = true
+		end
+	end
+end)
+
+-- Save file
+local function saveAdmins()
+
+	if not writefile then return end
+
+	local str = ""
+
+	for name,_ in pairs(adminList) do
+		str = str..name.."\n"
+	end
+
+	writefile(FILE,str)
+
+end
+
+-------------------------------------------------
+-- CHAT COMMAND
+-------------------------------------------------
+local function sendChat(msg)
+
+	if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+		TextChatService.TextChannels.RBXGeneral:SendAsync(msg)
+	else
+		ReplicatedStorage.DefaultChatSystemChatEvents
+		.SayMessageRequest:FireServer(msg,"All")
+	end
+
+end
+
+-------------------------------------------------
+-- GUI ROOT
+-------------------------------------------------
+local gui = Instance.new("ScreenGui")
+gui.Name = "bohub_admin"
+gui.ResetOnSpawn = false
+gui.Parent = PlayerGui
+
+-------------------------------------------------
+-- TOGGLE BUTTON
+-------------------------------------------------
+local toggle = Instance.new("TextButton")
+toggle.Parent = gui
+toggle.Size = UDim2.new(0,52,0,52)
+toggle.Position = UDim2.new(0,16,0.5,-26)
+toggle.Text = "BO"
+toggle.Font = Enum.Font.GothamBold
+toggle.TextSize = 16
+toggle.TextColor3 = Color3.new(1,1,1)
+toggle.BackgroundColor3 = Color3.fromRGB(80,160,255)
+toggle.BorderSizePixel = 0
+Instance.new("UICorner",toggle).CornerRadius = UDim.new(1,0)
+
+-------------------------------------------------
+-- MAIN MENU
+-------------------------------------------------
+local main = Instance.new("Frame")
+main.Parent = gui
+main.Size = UDim2.new(0,520,0,320)
+main.Position = UDim2.new(0.5,-260,0.5,-160)
+main.BackgroundColor3 = Color3.fromRGB(170,220,255)
+Instance.new("UICorner",main)
+main.Visible = false
+
+toggle.MouseButton1Click:Connect(function()
+	main.Visible = not main.Visible
+end)
+
+-------------------------------------------------
+-- TITLE
+-------------------------------------------------
+local title = Instance.new("TextLabel")
+title.Parent = main
+title.Size = UDim2.new(1,0,0,40)
+title.BackgroundTransparency = 1
+title.Text = "☁ bohub admin"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextColor3 = Color3.fromRGB(30,60,100)
+
+-------------------------------------------------
+-- /AD BUTTON
+-------------------------------------------------
+local adBtn = Instance.new("TextButton")
+adBtn.Parent = main
+adBtn.Size = UDim2.new(0,60,0,28)
+adBtn.Position = UDim2.new(1,-70,0,6)
+adBtn.Text = "/ad"
+adBtn.Font = Enum.Font.GothamBold
+adBtn.TextSize = 14
+adBtn.TextColor3 = Color3.new(1,1,1)
+adBtn.BackgroundColor3 = Color3.fromRGB(80,160,255)
+Instance.new("UICorner",adBtn)
+
+adBtn.MouseButton1Click:Connect(function()
+	sendChat("/ad")
+end)
+
+-------------------------------------------------
+-- LIST FRAME
+-------------------------------------------------
+local listFrame = Instance.new("Frame")
+listFrame.Parent = main
+listFrame.Size = UDim2.new(1,-16,1,-60)
+listFrame.Position = UDim2.new(0,8,0,48)
+listFrame.BackgroundColor3 = Color3.fromRGB(210,235,255)
+Instance.new("UICorner",listFrame)
+
+local layout = Instance.new("UIListLayout")
+layout.Parent = listFrame
+layout.Padding = UDim.new(0,6)
+
+-------------------------------------------------
+-- BUTTON CREATOR
+-------------------------------------------------
+local function makeBtn(parent,text,pos,color,cmd,name)
+
+	local btn = Instance.new("TextButton")
+	btn.Parent = parent
+	btn.Size = UDim2.new(0.11,-4,0.8,0)
+	btn.Position = pos
+	btn.Text = text
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 12
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.BackgroundColor3 = color
+	Instance.new("UICorner",btn)
+
+	btn.MouseButton1Click:Connect(function()
+		sendChat(cmd.." "..name)
+	end)
+
+end
+
+-------------------------------------------------
+-- CREATE ROW
+-------------------------------------------------
+local function createRow(name)
+
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1,-8,0,40)
+	row.BackgroundTransparency = 1
+
+	local label = Instance.new("TextLabel")
+	label.Parent = row
+	label.Size = UDim2.new(0.25,0,1,0)
+	label.BackgroundTransparency = 1
+	label.Text = name
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 13
+
+	if Players:FindFirstChild(name) then
+		label.TextColor3 = Color3.fromRGB(0,200,100)
+	else
+		label.TextColor3 = Color3.fromRGB(255,80,80)
+	end
+
+	makeBtn(row,"Kick",UDim2.new(0.26,0,0.1,0),Color3.fromRGB(255,90,90),"kick",name)
+	makeBtn(row,"TP",UDim2.new(0.37,0,0.1,0),Color3.fromRGB(80,160,255),"tp",name)
+	makeBtn(row,"LockTP",UDim2.new(0.48,0,0.1,0),Color3.fromRGB(100,200,100),"locktp",name)
+	makeBtn(row,"UnlockTP",UDim2.new(0.59,0,0.1,0),Color3.fromRGB(200,150,80),"unlocktp",name)
+	makeBtn(row,"LockFly",UDim2.new(0.70,0,0.1,0),Color3.fromRGB(120,120,255),"lockfly",name)
+	makeBtn(row,"Unlock",UDim2.new(0.81,0,0.1,0),Color3.fromRGB(255,160,80),"unlockfly",name)
+
+	row.Parent = listFrame
+
+end
+
+-------------------------------------------------
+-- REFRESH LIST
+-------------------------------------------------
+local function refreshList()
+
+	for _,v in pairs(listFrame:GetChildren()) do
+		if v:IsA("Frame") then
+			v:Destroy()
+		end
+	end
+
+	for name,_ in pairs(adminList) do
+		createRow(name)
+	end
+
+end
+
+-------------------------------------------------
+-- DETECT /me
+-------------------------------------------------
+local function watchPlayer(plr)
+
+	plr.Chatted:Connect(function(msg)
+
+		if string.lower(msg):find("/me") then
+
+			if not adminList[plr.Name] then
+
+				adminList[plr.Name] = true
+				saveAdmins()
+				refreshList()
+
+			end
+
+		end
+
+	end)
+
+end
+
+-------------------------------------------------
+-- WATCH PLAYERS
+-------------------------------------------------
+for _,p in pairs(Players:GetPlayers()) do
+	if p ~= LocalPlayer then
+		watchPlayer(p)
+	end
+end
+
+Players.PlayerAdded:Connect(function(p)
+	watchPlayer(p)
+	refreshList()
+end)
+
+Players.PlayerRemoving:Connect(function()
+	refreshList()
+end)
+
+-------------------------------------------------
+-- START
+-------------------------------------------------
+refreshList()
