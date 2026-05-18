@@ -1,5 +1,12 @@
+-- Full updated TP Menu script with auto-save and TP Mode tab
+-- Added: Tab 4 coordinate input supporting "~" (current coordinate),
+-- a "TP Input" button to teleport to the parsed coordinates (respects current tpMode),
+-- and a "Show Position" toggle + label that displays current HRP position.
+
 local player = game.Players.LocalPlayer
 local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.ResetOnSpawn = false
@@ -122,10 +129,18 @@ TabBar.Position=UDim2.new(0,0,0,30)
 TabBar.BackgroundTransparency=1
 TabBar.Parent=Frame
 
-local function makeTab(text,pos)
-	local b=Instance.new("TextButton")
-	b.Size=UDim2.new(0.5,-6,0,30)
-	b.Position=UDim2.new(pos,pos==0 and 5 or -5,0,2)
+-- Modified makeTab to accept index param (0..n-1)
+local function makeTab(text, index, total)
+	local total = total or 2
+	local sizeX = 1/total
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(sizeX, -6, 0, 30)
+	b.Position = UDim2.new(sizeX * index, index == 0 and 5 or 0, 0, 2)
+	-- adjust x offset for edges
+	if index == total-1 then
+		-- push left offset a little for last tab
+		b.Position = UDim2.new(sizeX * index, -5, 0, 2)
+	end
 	b.BackgroundColor3=Color3.fromRGB(255,255,255)
 	b.TextColor3=Color3.new(0,0,0)
 	b.Text=text
@@ -134,8 +149,12 @@ local function makeTab(text,pos)
 	return b
 end
 
-local TabTP=makeTab("TP",0)
-local TabSetting=makeTab("Setting",0.5)
+-- We'll have 4 tabs now
+local TAB_COUNT = 4
+local TabTP = makeTab("TP", 0, TAB_COUNT)
+local TabSetting = makeTab("Setting", 1, TAB_COUNT)
+local TabConfig = makeTab("Config", 2, TAB_COUNT)
+local TabMode = makeTab("TP Mode", 3, TAB_COUNT)
 
 local TPFrame=Instance.new("Frame")
 TPFrame.Size=UDim2.new(1,0,1,-70)
@@ -147,14 +166,40 @@ local SettingFrame=TPFrame:Clone()
 SettingFrame.Visible=false
 SettingFrame.Parent=Frame
 
+local ConfigFrame = TPFrame:Clone()
+ConfigFrame.Visible = false
+ConfigFrame.Parent = Frame
+
+local ModeFrame = TPFrame:Clone()
+ModeFrame.Visible = false
+ModeFrame.Parent = Frame
+
 TabTP.MouseButton1Click:Connect(function()
 	TPFrame.Visible=true
 	SettingFrame.Visible=false
+	ConfigFrame.Visible=false
+	ModeFrame.Visible=false
 end)
 
 TabSetting.MouseButton1Click:Connect(function()
 	TPFrame.Visible=false
 	SettingFrame.Visible=true
+	ConfigFrame.Visible=false
+	ModeFrame.Visible=false
+end)
+
+TabConfig.MouseButton1Click:Connect(function()
+	TPFrame.Visible=false
+	SettingFrame.Visible=false
+	ConfigFrame.Visible=true
+	ModeFrame.Visible=false
+end)
+
+TabMode.MouseButton1Click:Connect(function()
+	TPFrame.Visible=false
+	SettingFrame.Visible=false
+	ConfigFrame.Visible=false
+	ModeFrame.Visible=true
 end)
 
 local MiniFrame=Instance.new("Frame")
@@ -282,11 +327,18 @@ UIS.InputChanged:Connect(function(input)
 	end
 end)
 
+-- Teleport mode globals
+-- modes: "instant", "smooth", "step"
+local tpMode = "instant"
+local stepDistance = 10 -- default step distance in studs
+local smoothSpeed = 80 -- studs per second for smooth mode (adjustable)
+
 local function teleport(pos)
 	local char=player.Character
 	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
 	local hrp=char.HumanoidRootPart
 
+	-- vehicle teleport
 	if tpVehicle then
 		for _,v in pairs(workspace:GetDescendants()) do
 			if (v:IsA("Seat") or v:IsA("VehicleSeat")) and v.Occupant==char:FindFirstChildOfClass("Humanoid") then
@@ -296,11 +348,47 @@ local function teleport(pos)
 		end
 	end
 
-	hrp.CFrame=CFrame.new(pos)
+	-- Teleport depending on mode
+	if tpMode == "instant" then
+		hrp.CFrame=CFrame.new(pos)
+		return
+	elseif tpMode == "smooth" then
+		-- compute distance and duration from smoothSpeed
+		local dist = (hrp.Position - pos).Magnitude
+		local duration = 0
+		if smoothSpeed > 0 then
+			duration = math.clamp(dist / smoothSpeed, 0.05, 10)
+		else
+			duration = 0.5
+		end
+		local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos)})
+		tween:Play()
+		return
+	elseif tpMode == "step" then
+		-- move in increments of stepDistance until reach within stepDistance of target
+		task.spawn(function()
+			local target = pos
+			while true do
+				if not char or not char.Parent or not hrp.Parent then break end
+				local curPos = hrp.Position
+				local dir = (target - curPos)
+				local dist = dir.Magnitude
+				if dist <= 1 then
+					hrp.CFrame = CFrame.new(target)
+					break
+				end
+				local step = math.min(stepDistance, dist)
+				local nextPos = curPos + dir.Unit * step
+				hrp.CFrame = CFrame.new(nextPos)
+				wait(0.08) -- short pause between steps; adjust for smoothness
+			end
+		end)
+		return
+	end
 end
 
+-- original createSlot function (kept simple) will be patched later
 local function createSlot()
-
 	local data={pos=nil}
 
 	local Row=Instance.new("Frame")
@@ -387,6 +475,13 @@ local function createSlot()
 		local char=player.Character
 		if char and char:FindFirstChild("HumanoidRootPart") then
 			data.pos=char.HumanoidRootPart.Position
+			-- store SavedPos Value for config export
+			if not Row:FindFirstChild("SavedPos") then
+				local val = Instance.new("Vector3Value")
+				val.Name = "SavedPos"
+				val.Parent = Row
+			end
+			Row.SavedPos.Value = data.pos
 		end
 	end
 
@@ -422,12 +517,11 @@ DeleteAll.MouseButton1Click:Connect(function()
 	end
 
 end)
+
 --//====================================================
 --// TAB 3 CONFIG FULL - FIX LOAD TP HOẠT ĐỘNG
 --// DÁN XUỐNG CUỐI SCRIPT GỐC
 --//====================================================
-
-local HttpService = game:GetService("HttpService")
 
 local isfile = isfile or function() return false end
 local readfile = readfile or function() return "" end
@@ -444,10 +538,25 @@ pcall(function()
 	end
 end)
 
+-- Utility: ensure unique config name (append suffix if exists)
+local function makeUniqueName(name, all)
+	if not name or name == "" then return nil end
+	if not all or type(all) ~= "table" then return name end
+	if not all[name] then return name end
+	local i = 1
+	local newName = name .. " (" .. tostring(i) .. ")"
+	while all[newName] do
+		i = i + 1
+		newName = name .. " (" .. tostring(i) .. ")"
+	end
+	return newName
+end
+
 --====================================================
--- PATCH CREATE SLOT
+-- PATCH CREATE SLOT (updated to accept loading data)
 --====================================================
 
+-- Save pointer to old createSlot (we defined earlier)
 local oldCreateSlot = createSlot
 
 createSlot = function(loadData)
@@ -471,20 +580,31 @@ createSlot = function(loadData)
 		val.Parent = row
 	end
 
-	-- save button lưu vị trí
+	-- save button lưu vị trí (bind again in case)
 	for _,obj in pairs(row:GetChildren()) do
 		if obj:IsA("TextButton") and obj.Text == "Save" then
+			-- disconnect previous connections not trivial; we just add another handler
 			obj.MouseButton1Click:Connect(function()
 				local char = player.Character
 				if char and char:FindFirstChild("HumanoidRootPart") then
-					row.SavedPos.Value =
-						char.HumanoidRootPart.Position
+					row.SavedPos.Value = char.HumanoidRootPart.Position
 				end
 			end)
 		end
 	end
 
-	-- load data config
+	-- bind TP button to use current teleport function (if SavedPos present)
+	for _,obj in pairs(row:GetChildren()) do
+		if obj:IsA("TextButton") and obj.Text == "TP" then
+			obj.MouseButton1Click:Connect(function()
+				if row:FindFirstChild("SavedPos") and row.SavedPos.Value then
+					teleport(row.SavedPos.Value)
+				end
+			end)
+		end
+	end
+
+	-- load data config into UI
 	if loadData then
 
 		local pos = nil
@@ -506,7 +626,7 @@ createSlot = function(loadData)
 			row.SavedPos.Value = pos
 		end
 
-		-- bind lại nút TP
+		-- Bind TP button (already bound above) -- kept for redundancy
 		if pos then
 			for _,obj in pairs(row:GetChildren()) do
 				if obj:IsA("TextButton") and obj.Text == "TP" then
@@ -523,46 +643,11 @@ end
 -- TAB CONFIG
 --====================================================
 
-local TabConfig = makeTab("Config",0.66)
-
-TabTP.Size = UDim2.new(0.33,-6,0,30)
-TabSetting.Size = UDim2.new(0.33,-6,0,30)
-TabConfig.Size = UDim2.new(0.33,-6,0,30)
-
-TabTP.Position = UDim2.new(0,5,0,2)
-TabSetting.Position = UDim2.new(0.33,0,0,2)
-TabConfig.Position = UDim2.new(0.66,-5,0,2)
-
-local ConfigFrame = TPFrame:Clone()
-ConfigFrame.Visible = false
-ConfigFrame.Parent = Frame
-
-TabTP.MouseButton1Click:Connect(function()
-	TPFrame.Visible = true
-	SettingFrame.Visible = false
-	ConfigFrame.Visible = false
-end)
-
-TabSetting.MouseButton1Click:Connect(function()
-	TPFrame.Visible = false
-	SettingFrame.Visible = true
-	ConfigFrame.Visible = false
-end)
-
-TabConfig.MouseButton1Click:Connect(function()
-	TPFrame.Visible = false
-	SettingFrame.Visible = false
-	ConfigFrame.Visible = true
-end)
-
---====================================================
--- TOP
---====================================================
-
-local Top = Instance.new("Frame")
-Top.Size = UDim2.new(1,0,0,40)
-Top.BackgroundTransparency = 1
-Top.Parent = ConfigFrame
+-- Top area for ConfigFrame
+local TopC = Instance.new("Frame")
+TopC.Size = UDim2.new(1,0,0,40)
+TopC.BackgroundTransparency = 1
+TopC.Parent = ConfigFrame
 
 local CreateConfig = Instance.new("TextButton")
 CreateConfig.Size = UDim2.new(0.5,-5,0,35)
@@ -570,7 +655,7 @@ CreateConfig.Position = UDim2.new(0,5,0,2)
 CreateConfig.Text = "Tạo"
 CreateConfig.BackgroundColor3 = Color3.fromRGB(255,255,255)
 CreateConfig.TextColor3 = Color3.new(0,0,0)
-CreateConfig.Parent = Top
+CreateConfig.Parent = TopC
 Instance.new("UICorner",CreateConfig)
 
 local DeleteAllConfig = Instance.new("TextButton")
@@ -579,13 +664,10 @@ DeleteAllConfig.Position = UDim2.new(0.5,0,0,2)
 DeleteAllConfig.Text = "Delete All"
 DeleteAllConfig.BackgroundColor3 = Color3.fromRGB(255,255,255)
 DeleteAllConfig.TextColor3 = Color3.new(0,0,0)
-DeleteAllConfig.Parent = Top
+DeleteAllConfig.Parent = TopC
 Instance.new("UICorner",DeleteAllConfig)
 
---====================================================
--- LIST
---====================================================
-
+-- List for configs
 local ConfigList = Instance.new("ScrollingFrame")
 ConfigList.Size = UDim2.new(1,-10,1,-50)
 ConfigList.Position = UDim2.new(0,5,0,45)
@@ -602,7 +684,7 @@ ConfigLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 end)
 
 --====================================================
--- FILE
+-- FILE read/write helpers (keep same configs.json index)
 --====================================================
 
 local function ReadData()
@@ -626,7 +708,7 @@ local function SaveData(tbl)
 end
 
 --====================================================
--- GET TP SLOT
+-- GET TP SLOT from current List UI
 --====================================================
 
 local function GetTPSlots()
@@ -650,12 +732,13 @@ local function GetTPSlots()
 
 			if row:FindFirstChild("SavedPos") then
 				local p = row.SavedPos.Value
-
-				slot.pos = {
-					x = p.X,
-					y = p.Y,
-					z = p.Z
-				}
+				if p then
+					slot.pos = {
+						x = p.X,
+						y = p.Y,
+						z = p.Z
+					}
+				end
 			end
 
 			table.insert(result,slot)
@@ -666,7 +749,7 @@ local function GetTPSlots()
 end
 
 --====================================================
--- LOAD TP SLOT
+-- LOAD TP SLOTS into the TP list UI
 --====================================================
 
 local function LoadTPSlots(data)
@@ -689,8 +772,10 @@ local function LoadTPSlots(data)
 end
 
 --====================================================
--- CREATE CONFIG SLOT
+-- CREATE CONFIG SLOT (UI for saving/loading configs)
 --====================================================
+
+local currentConfigName = nil -- name of loaded config (for auto-save)
 
 local function CreateConfigSlot(defaultName)
 
@@ -733,11 +818,23 @@ local function CreateConfigSlot(defaultName)
 	Delete.BackgroundColor3 = Color3.fromRGB(255,255,255)
 	Instance.new("UICorner",Delete)
 
+	-- Save behavior: if name exists, create unique name instead of overwriting
 	Save.MouseButton1Click:Connect(function()
 		if Name.Text == "" then return end
 
 		local all = ReadData()
-		all[Name.Text] = GetTPSlots()
+		local chosenName = Name.Text
+
+		-- If already exists, auto-rename the new saved entry (append suffix)
+		if all[chosenName] then
+			local unique = makeUniqueName(chosenName, all)
+			-- rename in UI so user sees the new name
+			Name.Text = unique
+			chosenName = unique
+		end
+
+		-- Save current TP slots under chosenName
+		all[chosenName] = GetTPSlots()
 		SaveData(all)
 	end)
 
@@ -745,7 +842,9 @@ local function CreateConfigSlot(defaultName)
 		local all = ReadData()
 
 		if all[Name.Text] then
+			-- load into TP slots UI
 			LoadTPSlots(all[Name.Text])
+			currentConfigName = Name.Text
 		end
 	end)
 
@@ -754,15 +853,16 @@ local function CreateConfigSlot(defaultName)
 		all[Name.Text] = nil
 		SaveData(all)
 
+		if currentConfigName == Name.Text then
+			currentConfigName = nil
+		end
+
 		Row:Destroy()
 	end)
 
 end
 
---====================================================
--- BUTTON
---====================================================
-
+-- Buttons
 CreateConfig.MouseButton1Click:Connect(function()
 	CreateConfigSlot("")
 end)
@@ -776,10 +876,11 @@ DeleteAllConfig.MouseButton1Click:Connect(function()
 	end
 
 	SaveData({})
+	currentConfigName = nil
 end)
 
 --====================================================
--- AUTO LOAD CONFIG SLOT
+-- AUTO LOAD CONFIG SLOT at start (load index from configs.json)
 --====================================================
 
 task.spawn(function()
@@ -801,3 +902,313 @@ task.spawn(function()
 	end
 
 end)
+
+--====================================================
+-- AUTO-SAVE: when a config is loaded, save it every 5s while ConfigFrame is visible
+--====================================================
+
+task.spawn(function()
+	while true do
+		task.wait(5)
+		if ConfigFrame.Visible and currentConfigName and currentConfigName ~= "" then
+			local all = ReadData()
+			all[currentConfigName] = GetTPSlots()
+			SaveData(all)
+		end
+	end
+end)
+
+--====================================================
+-- MODE TAB UI (Tab 4)
+-- - Three toggles: Instant, Smooth, Step (mutually exclusive)
+-- - Step distance input
+-- - Smooth speed adjustable via slider/textbox (simple textbox for now)
+-- - Coordinate input: "x,y,z" where each part can be a number or "~" for current coordinate
+-- - "TP Input" button to teleport to the parsed coordinate (respects current tpMode)
+-- - "Show Position" toggle + label to display current HRP position
+--====================================================
+
+local ModeTitle = Instance.new("TextLabel")
+ModeTitle.Size = UDim2.new(1,0,0,30)
+ModeTitle.BackgroundTransparency = 1
+ModeTitle.Text = "TP Mode"
+ModeTitle.Font = Enum.Font.SourceSansBold
+ModeTitle.TextSize = 18
+ModeTitle.TextColor3 = Color3.new(0,0,0)
+ModeTitle.Parent = ModeFrame
+
+local ModeContainer = Instance.new("Frame")
+ModeContainer.Size = UDim2.new(1,0,1,-40)
+ModeContainer.Position = UDim2.new(0,0,0,40)
+ModeContainer.BackgroundTransparency = 1
+ModeContainer.Parent = ModeFrame
+
+local function createToggle(text, posY)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.8,0,0,36)
+	btn.Position = UDim2.new(0.1,0,posY,0)
+	btn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	btn.TextColor3 = Color3.new(0,0,0)
+	btn.Text = text .. " : OFF"
+	btn.Parent = ModeContainer
+	Instance.new("UICorner",btn)
+	return btn
+end
+
+local InstantToggle = createToggle("Instant TP", 0)
+local SmoothToggle = createToggle("Smooth TP", 0.2)
+local StepToggle = createToggle("Step TP", 0.4)
+
+local StepLabel = Instance.new("TextLabel")
+StepLabel.Size = UDim2.new(0.4,0,0,24)
+StepLabel.Position = UDim2.new(0.1,0,0.6,0)
+StepLabel.BackgroundTransparency = 1
+StepLabel.Text = "Step Distance:"
+StepLabel.TextColor3 = Color3.new(0,0,0)
+StepLabel.TextSize = 14
+StepLabel.Parent = ModeContainer
+
+local StepInput = Instance.new("TextBox")
+StepInput.Size = UDim2.new(0.4,0,0,24)
+StepInput.Position = UDim2.new(0.5,0,0.6,0)
+StepInput.BackgroundColor3 = Color3.fromRGB(255,255,255)
+StepInput.PlaceholderText = tostring(stepDistance)
+StepInput.Text = tostring(stepDistance)
+StepInput.Parent = ModeContainer
+Instance.new("UICorner", StepInput)
+
+local SmoothLabel = Instance.new("TextLabel")
+SmoothLabel.Size = UDim2.new(0.4,0,0,24)
+SmoothLabel.Position = UDim2.new(0.1,0,0.75,0)
+SmoothLabel.BackgroundTransparency = 1
+SmoothLabel.Text = "Smooth Speed (studs/s):"
+SmoothLabel.TextColor3 = Color3.new(0,0,0)
+SmoothLabel.TextSize = 14
+SmoothLabel.Parent = ModeContainer
+
+local SmoothInput = Instance.new("TextBox")
+SmoothInput.Size = UDim2.new(0.4,0,0,24)
+SmoothInput.Position = UDim2.new(0.5,0,0.75,0)
+SmoothInput.BackgroundColor3 = Color3.fromRGB(255,255,255)
+SmoothInput.PlaceholderText = tostring(smoothSpeed)
+SmoothInput.Text = tostring(smoothSpeed)
+SmoothInput.Parent = ModeContainer
+Instance.new("UICorner", SmoothInput)
+
+local function setMode(newMode)
+	tpMode = newMode or "instant"
+	InstantToggle.Text = "Instant TP : " .. (tpMode=="instant" and "ON" or "OFF")
+	SmoothToggle.Text = "Smooth TP : " .. (tpMode=="smooth" and "ON" or "OFF")
+	StepToggle.Text = "Step TP : " .. (tpMode=="step" and "ON" or "OFF")
+end
+
+InstantToggle.MouseButton1Click:Connect(function()
+	setMode("instant")
+end)
+
+SmoothToggle.MouseButton1Click:Connect(function()
+	setMode("smooth")
+end)
+
+StepToggle.MouseButton1Click:Connect(function()
+	setMode("step")
+end)
+
+StepInput.FocusLost:Connect(function(enter)
+	local n = tonumber(StepInput.Text)
+	if n and n > 0 then
+		stepDistance = n
+	else
+		StepInput.Text = tostring(stepDistance)
+	end
+end)
+
+SmoothInput.FocusLost:Connect(function(enter)
+	local n = tonumber(SmoothInput.Text)
+	if n and n > 0 then
+		smoothSpeed = n
+	else
+		SmoothInput.Text = tostring(smoothSpeed)
+	end
+end)
+
+-- Coordinate input UI
+local CoordLabel = Instance.new("TextLabel")
+CoordLabel.Size = UDim2.new(0.9,0,0,20)
+CoordLabel.Position = UDim2.new(0.05,0,0.88,0)
+CoordLabel.BackgroundTransparency = 1
+CoordLabel.Text = "Coord (x,y,z) - use ~ for current axis"
+CoordLabel.TextColor3 = Color3.new(0,0,0)
+CoordLabel.TextSize = 13
+CoordLabel.TextWrapped = true
+CoordLabel.Parent = ModeContainer
+
+local CoordInput = Instance.new("TextBox")
+CoordInput.Size = UDim2.new(0.7,0,0,26)
+CoordInput.Position = UDim2.new(0.05,0,0.95, -6)
+CoordInput.BackgroundColor3 = Color3.fromRGB(255,255,255)
+CoordInput.PlaceholderText = "~,~,~   or 0,100,0  or 10,~,20"
+CoordInput.Text = ""
+CoordInput.Parent = ModeContainer
+Instance.new("UICorner", CoordInput)
+
+local TPInputButton = Instance.new("TextButton")
+TPInputButton.Size = UDim2.new(0.22,0,0,26)
+TPInputButton.Position = UDim2.new(0.77,0,0.95, -6)
+TPInputButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
+TPInputButton.Text = "TP"
+TPInputButton.Parent = ModeContainer
+Instance.new("UICorner", TPInputButton)
+
+-- Show position toggle + display
+local ShowPosToggle = Instance.new("TextButton")
+ShowPosToggle.Size = UDim2.new(0.4,0,0,22)
+ShowPosToggle.Position = UDim2.new(0.05,0,0.52,0)
+ShowPosToggle.BackgroundColor3 = Color3.fromRGB(255,255,255)
+ShowPosToggle.Text = "Show Pos : OFF"
+ShowPosToggle.TextColor3 = Color3.new(0,0,0)
+ShowPosToggle.Parent = ModeContainer
+Instance.new("UICorner", ShowPosToggle)
+
+local CurrentPosLabel = Instance.new("TextLabel")
+CurrentPosLabel.Size = UDim2.new(0.5,0,0,22)
+CurrentPosLabel.Position = UDim2.new(0.5,0,0.52,0)
+CurrentPosLabel.BackgroundTransparency = 1
+CurrentPosLabel.Text = ""
+CurrentPosLabel.TextColor3 = Color3.new(0,0,0)
+CurrentPosLabel.TextSize = 13
+CurrentPosLabel.TextXAlignment = Enum.TextXAlignment.Left
+CurrentPosLabel.Parent = ModeContainer
+
+local showPos = false
+
+ShowPosToggle.MouseButton1Click:Connect(function()
+	showPos = not showPos
+	ShowPosToggle.Text = "Show Pos : " .. (showPos and "ON" or "OFF")
+	if not showPos then
+		CurrentPosLabel.Text = ""
+	end
+end)
+
+-- Utility: trim
+local function trim(s)
+	return (s:gsub("^%s*(.-)%s*$", "%1"))
+end
+
+-- Parse coordinate input string into Vector3.
+-- Supported patterns:
+-- - "x,y,z" (3 parts). Use "~" to keep current axis.
+-- - "x,y" (2 parts) interpreted as x,y,z=current
+-- - "y" (1 part) interpreted as set Y only (X,Z current)
+-- - If a part is empty or "~" => keep current axis
+-- Returns Vector3 or nil on failure.
+local function parseCoordString(str)
+	local char = player.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+	local hrp = char.HumanoidRootPart
+	local cur = hrp.Position
+
+	if not str or str == "" then return nil end
+
+	local parts = {}
+	for p in string.gmatch(str, "[^,]+") do
+		table.insert(parts, trim(p))
+	end
+
+	-- Handle empty parts if input contains consecutive commas (split preserved above doesn't capture empty).
+	-- So reconstruct splitting that preserves empties:
+	local function splitPreserveEmpty(s)
+		local t = {}
+		local field = ""
+		for i = 1, #s do
+			local c = s:sub(i,i)
+			if c == "," then
+				table.insert(t, trim(field))
+				field = ""
+			else
+				field = field .. c
+			end
+		end
+		table.insert(t, trim(field))
+		return t
+	end
+
+	parts = splitPreserveEmpty(str)
+
+	local px,py,pz = cur.X, cur.Y, cur.Z
+
+	if #parts == 1 then
+		local p = parts[1]
+		if p == "~" or p == "" then
+			-- nothing specified -> current position
+			return cur
+		end
+		local n = tonumber(p)
+		if n then
+			-- interpret single number as Y (set height), keep X/Z
+			py = n
+			return Vector3.new(px, py, pz)
+		else
+			return nil
+		end
+	elseif #parts == 2 then
+		-- interpret as x,y with z=current
+		local vals = {parts[1], parts[2], "~"}
+		parts = vals
+	end
+
+	-- now expect at least 3 parts; if more, take first 3
+	if #parts >= 3 then
+		local function parsePart(part, current)
+			if part == nil or part == "" or part == "~" then
+				return current
+			end
+			local n = tonumber(part)
+			if n then return n end
+			-- if parsing fails, return nil to indicate error
+			return nil
+		end
+
+		local a = parsePart(parts[1], px)
+		local b = parsePart(parts[2], py)
+		local c = parsePart(parts[3], pz)
+
+		if a == nil or b == nil or c == nil then
+			return nil
+		end
+
+		return Vector3.new(a,b,c)
+	end
+
+	return nil
+end
+
+-- Hook TPInputButton
+TPInputButton.MouseButton1Click:Connect(function()
+	local input = CoordInput.Text
+	local pos = parseCoordString(input)
+	if pos then
+		teleport(pos)
+	end
+end)
+
+-- Update current position label while showPos is true
+task.spawn(function()
+	while true do
+		if showPos then
+			local char = player.Character
+			if char and char:FindFirstChild("HumanoidRootPart") then
+				local p = char.HumanoidRootPart.Position
+				CurrentPosLabel.Text = string.format("Pos: %.2f, %.2f, %.2f", p.X, p.Y, p.Z)
+			else
+				CurrentPosLabel.Text = "Pos: N/A"
+			end
+		end
+		task.wait(0.5)
+	end
+end)
+
+-- initialize mode display
+setMode(tpMode)
+
+-- End of script
