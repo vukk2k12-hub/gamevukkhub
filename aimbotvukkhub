@@ -1,3 +1,4 @@
+-- AimHead vuhub (updated) - Tab 3 "Distance" with Aim Distance input and Auto Fire button
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -14,6 +15,12 @@ local espOn = false
 local espLines = {}
 local espDistance = 100
 
+local autoShot = false
+local lastAutoShot = 0
+local autoShotInterval = 0.12 -- seconds between auto shots
+
+local aimRange = 0 -- 0 = infinite
+
 local function createGUI()
     if player.PlayerGui:FindFirstChild("BlueSkyAimHeadMenu") then return end
 
@@ -22,8 +29,8 @@ local function createGUI()
     ScreenGui.ResetOnSpawn = false
 
     local MainFrame = Instance.new("Frame", ScreenGui)
-    MainFrame.Size = UDim2.new(0,300,0,300)
-    MainFrame.Position = UDim2.new(0.5,-150,0.5,-150)
+    MainFrame.Size = UDim2.new(0,320,0,380)
+    MainFrame.Position = UDim2.new(0.5,-160,0.5,-190)
     MainFrame.BackgroundColor3 = Color3.fromRGB(135,206,250)
     MainFrame.BorderSizePixel = 0
     MainFrame.Active = true
@@ -132,7 +139,7 @@ local function createGUI()
     TabBar.BackgroundTransparency=1
 
     local MainTab=Instance.new("TextButton",TabBar)
-    MainTab.Size=UDim2.new(0.5,0,1,0)
+    MainTab.Size=UDim2.new(1/3,0,1,0)
     MainTab.Text="Main"
     MainTab.BackgroundTransparency=1
     MainTab.TextColor3=Color3.new(1,1,1)
@@ -140,16 +147,25 @@ local function createGUI()
     MainTab.TextSize=16
 
     local SettingTab=Instance.new("TextButton",TabBar)
-    SettingTab.Size=UDim2.new(0.5,0,1,0)
-    SettingTab.Position=UDim2.new(0.5,0,0,0)
+    SettingTab.Size=UDim2.new(1/3,0,1,0)
+    SettingTab.Position=UDim2.new(1/3,0,0,0)
     SettingTab.Text="Settings"
     SettingTab.BackgroundTransparency=1
     SettingTab.TextColor3=Color3.new(1,1,1)
     SettingTab.Font=Enum.Font.GothamBold
     SettingTab.TextSize=16
 
+    local DistanceTab=Instance.new("TextButton",TabBar)
+    DistanceTab.Size=UDim2.new(1/3,0,1,0)
+    DistanceTab.Position=UDim2.new(2/3,0,0,0)
+    DistanceTab.Text="Distance"
+    DistanceTab.BackgroundTransparency=1
+    DistanceTab.TextColor3=Color3.new(1,1,1)
+    DistanceTab.Font=Enum.Font.GothamBold
+    DistanceTab.TextSize=16
+
     local MainPage=Instance.new("Frame",MainFrame)
-    MainPage.Size=UDim2.new(1,0,1,-70)
+    MainPage.Size=UDim2.new(1,0,1,-100)
     MainPage.Position=UDim2.new(0,0,0,70)
     MainPage.BackgroundTransparency=1
 
@@ -158,6 +174,12 @@ local function createGUI()
     SettingPage.Position=MainPage.Position
     SettingPage.BackgroundTransparency=1
     SettingPage.Visible=false
+
+    local DistancePage=Instance.new("Frame",MainFrame)
+    DistancePage.Size=MainPage.Size
+    DistancePage.Position=MainPage.Position
+    DistancePage.BackgroundTransparency=1
+    DistancePage.Visible=false
 
     local function makeButton(parent,text,pos)
         local btn=Instance.new("TextButton",parent)
@@ -178,6 +200,7 @@ local function createGUI()
     local CheckWallToggle=makeButton(MainPage,"Check Wall: ON",UDim2.new(0.1,0,0,130))
     local CheckTeamNumToggle=makeButton(MainPage,"Check TeamNum: OFF",UDim2.new(0.1,0,0,170))
     local AimNPCToggle=makeButton(MainPage,"Aim NPC: OFF",UDim2.new(0.1,0,0,210))
+    -- Auto fire moved to Distance tab (no AutoShot button here now)
 
     local TargetBtn=makeButton(SettingPage,"Select Target",UDim2.new(0.1,0,0,10))
     local ESPToggle=makeButton(SettingPage,"ESP Line: OFF",UDim2.new(0.1,0,0,50))
@@ -220,9 +243,32 @@ local function createGUI()
     ESPDistBox.TextSize=16
     Instance.new("UICorner",ESPDistBox)
 
+    -- Distance tab contents: Aim Distance + Auto Fire button
+    local DistanceLabel=Instance.new("TextLabel",DistancePage)
+    DistanceLabel.Size=UDim2.new(0.8,0,0,30)
+    DistanceLabel.Position=UDim2.new(0.1,0,0,20)
+    DistanceLabel.BackgroundTransparency=1
+    DistanceLabel.Text="Aim Distance (0 = infinite):"
+    DistanceLabel.TextColor3=Color3.new(1,1,1)
+    DistanceLabel.Font=Enum.Font.GothamBold
+    DistanceLabel.TextSize=16
+
+    local DistanceBox=Instance.new("TextBox",DistancePage)
+    DistanceBox.Size=UDim2.new(0.8,0,0,30)
+    DistanceBox.Position=UDim2.new(0.1,0,0,60)
+    DistanceBox.BackgroundColor3=Color3.fromRGB(100,180,255)
+    DistanceBox.Text="0"
+    DistanceBox.TextColor3=Color3.new(1,1,1)
+    DistanceBox.Font=Enum.Font.GothamBold
+    DistanceBox.TextSize=16
+    Instance.new("UICorner",DistanceBox)
+
+    local AutoFireBtn=makeButton(DistancePage,"Auto Fire: OFF",UDim2.new(0.1,0,0,110))
+    -- AutoFireBtn toggles autoShot
+
     local TargetFrame=Instance.new("Frame",ScreenGui)
-    TargetFrame.Size=UDim2.new(0,200,0,250)
-    TargetFrame.Position=UDim2.new(0.5,160,0.5,-125)
+    TargetFrame.Size=UDim2.new(0,220,0,260)
+    TargetFrame.Position=UDim2.new(0.5,170,0.5,-130)
     TargetFrame.BackgroundColor3=Color3.fromRGB(135,206,250)
     TargetFrame.Visible=false
     Instance.new("UICorner",TargetFrame)
@@ -254,17 +300,29 @@ local function createGUI()
     MainTab.MouseButton1Click:Connect(function()
         MainPage.Visible=true
         SettingPage.Visible=false
+        DistancePage.Visible=false
     end)
 
     SettingTab.MouseButton1Click:Connect(function()
         MainPage.Visible=false
         SettingPage.Visible=true
+        DistancePage.Visible=false
+    end)
+
+    DistanceTab.MouseButton1Click:Connect(function()
+        MainPage.Visible=false
+        SettingPage.Visible=false
+        DistancePage.Visible=true
     end)
 
     AimHeadToggle.MouseButton1Click:Connect(function()
         aimOn=not aimOn
         AimHeadToggle.Text="AimHead: "..(aimOn and "ON" or "OFF")
         FOVCircle.Visible=aimOn
+        if not aimOn then
+            autoShot = false
+            AutoFireBtn.Text = "Auto Fire: OFF"
+        end
     end)
 
     CheckTeamToggle.MouseButton1Click:Connect(function()
@@ -290,6 +348,11 @@ local function createGUI()
     AimNPCToggle.MouseButton1Click:Connect(function()
         aimNPC=not aimNPC
         AimNPCToggle.Text="Aim NPC: "..(aimNPC and "ON" or "OFF")
+    end)
+
+    AutoFireBtn.MouseButton1Click:Connect(function()
+        autoShot = not autoShot
+        AutoFireBtn.Text = "Auto Fire: "..(autoShot and "ON" or "OFF")
     end)
 
     ESPToggle.MouseButton1Click:Connect(function()
@@ -365,10 +428,25 @@ local function createGUI()
         return true
     end
 
+    local function withinAimRange(head)
+        if not player.Character or not player.Character:FindFirstChild("Head") then
+            return false
+        end
+        local pHead = player.Character.Head
+        local d = (pHead.Position - head.Position).Magnitude
+        if aimRange == 0 then
+            return true
+        end
+        return d <= aimRange
+    end
+
     local function getClosestTarget()
 
         local center=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
         local fov=tonumber(FOVBox.Text) or 100
+
+        -- refresh aimRange from DistanceBox (tab 3)
+        aimRange = tonumber(DistanceBox.Text) or 0
 
         if priorityTarget and priorityTarget.Character then
             local head=priorityTarget.Character:FindFirstChild("Head")
@@ -376,8 +454,8 @@ local function createGUI()
             if head and hum and hum.Health>0 then
                 local pos,onScreen=Camera:WorldToViewportPoint(head.Position)
                 if onScreen then
-                    local dist=(Vector2.new(pos.X,pos.Y)-center).Magnitude
-                    if dist<=fov and canSee(head) then
+                    local dist2d=(Vector2.new(pos.X,pos.Y)-center).Magnitude
+                    if dist2d<=fov and canSee(head) and withinAimRange(head) then
                         return priorityTarget
                     end
                 end
@@ -409,10 +487,10 @@ local function createGUI()
                         local screenPos,onScreen=Camera:WorldToViewportPoint(head.Position)
 
                         if onScreen then
-                            local dist=(Vector2.new(screenPos.X,screenPos.Y)-center).Magnitude
+                            local dist2d=(Vector2.new(screenPos.X,screenPos.Y)-center).Magnitude
 
-                            if dist<=fov and dist<shortest and canSee(head) then
-                                shortest=dist
+                            if dist2d<=fov and dist2d<shortest and canSee(head) and withinAimRange(head) then
+                                shortest=dist2d
                                 closest=plr
                             end
                         end
@@ -450,7 +528,7 @@ local function createGUI()
                             if onScreen then
                                 local dist=(Vector2.new(screenPos.X,screenPos.Y)-center).Magnitude
 
-                                if dist<=fov and dist<shortestNPC and canSee(head) then
+                                if dist<=fov and dist<shortestNPC and canSee(head) and withinAimRange(head) then
                                     shortestNPC=dist
                                     closestNPC=npc
                                 end
@@ -502,7 +580,8 @@ local function createGUI()
                                 if player:IsFriendsWith(plr.UserId) then
                                     line.Color=Color3.fromRGB(0,255,0)
                                 else
-                                    line.Color=Color3.fromRGB(255,0,0)
+                                    -- Blue sky color instead of red
+                                    line.Color=Color3.fromRGB(135,206,250)
                                 end
                             else
                                 line.Visible=false
@@ -530,6 +609,21 @@ local function createGUI()
 
                 if head then
                     Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
+
+                    -- Auto shot logic: try to Activate the tool with a small cooldown
+                    if autoShot then
+                        if tick() - lastAutoShot >= autoShotInterval then
+                            lastAutoShot = tick()
+                            pcall(function()
+                                if player.Character then
+                                    local tool = player.Character:FindFirstChildOfClass("Tool")
+                                    if tool and tool.Parent then
+                                        tool:Activate()
+                                    end
+                                end
+                            end)
+                        end
+                    end
                 end
             end
         end
