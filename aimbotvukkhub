@@ -1,4 +1,4 @@
--- AimHead vuhub (updated) - Tab 3 "Distance" with Aim Distance input and Auto Fire button
+-- AimHead vuhub (updated) - adds Tab 4 "Team" with a scrolling list of team-check buttons
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -8,6 +8,8 @@ local player = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
 local teamNumCheck = false
+local teamCheck = false
+local friendCheck = false
 local aimNPC = false
 local priorityTarget = nil
 
@@ -29,8 +31,8 @@ local function createGUI()
     ScreenGui.ResetOnSpawn = false
 
     local MainFrame = Instance.new("Frame", ScreenGui)
-    MainFrame.Size = UDim2.new(0,320,0,380)
-    MainFrame.Position = UDim2.new(0.5,-160,0.5,-190)
+    MainFrame.Size = UDim2.new(0,340,0,420)
+    MainFrame.Position = UDim2.new(0.5,-170,0.5,-210)
     MainFrame.BackgroundColor3 = Color3.fromRGB(135,206,250)
     MainFrame.BorderSizePixel = 0
     MainFrame.Active = true
@@ -139,7 +141,7 @@ local function createGUI()
     TabBar.BackgroundTransparency=1
 
     local MainTab=Instance.new("TextButton",TabBar)
-    MainTab.Size=UDim2.new(1/3,0,1,0)
+    MainTab.Size=UDim2.new(1/4,0,1,0)
     MainTab.Text="Main"
     MainTab.BackgroundTransparency=1
     MainTab.TextColor3=Color3.new(1,1,1)
@@ -147,8 +149,8 @@ local function createGUI()
     MainTab.TextSize=16
 
     local SettingTab=Instance.new("TextButton",TabBar)
-    SettingTab.Size=UDim2.new(1/3,0,1,0)
-    SettingTab.Position=UDim2.new(1/3,0,0,0)
+    SettingTab.Size=UDim2.new(1/4,0,1,0)
+    SettingTab.Position=UDim2.new(1/4,0,0,0)
     SettingTab.Text="Settings"
     SettingTab.BackgroundTransparency=1
     SettingTab.TextColor3=Color3.new(1,1,1)
@@ -156,13 +158,22 @@ local function createGUI()
     SettingTab.TextSize=16
 
     local DistanceTab=Instance.new("TextButton",TabBar)
-    DistanceTab.Size=UDim2.new(1/3,0,1,0)
-    DistanceTab.Position=UDim2.new(2/3,0,0,0)
+    DistanceTab.Size=UDim2.new(1/4,0,1,0)
+    DistanceTab.Position=UDim2.new(2/4,0,0,0)
     DistanceTab.Text="Distance"
     DistanceTab.BackgroundTransparency=1
     DistanceTab.TextColor3=Color3.new(1,1,1)
     DistanceTab.Font=Enum.Font.GothamBold
     DistanceTab.TextSize=16
+
+    local TeamTab=Instance.new("TextButton",TabBar)
+    TeamTab.Size=UDim2.new(1/4,0,1,0)
+    TeamTab.Position=UDim2.new(3/4,0,0,0)
+    TeamTab.Text="Team"
+    TeamTab.BackgroundTransparency=1
+    TeamTab.TextColor3=Color3.new(1,1,1)
+    TeamTab.Font=Enum.Font.GothamBold
+    TeamTab.TextSize=16
 
     local MainPage=Instance.new("Frame",MainFrame)
     MainPage.Size=UDim2.new(1,0,1,-100)
@@ -181,6 +192,12 @@ local function createGUI()
     DistancePage.BackgroundTransparency=1
     DistancePage.Visible=false
 
+    local TeamPage=Instance.new("Frame",MainFrame)
+    TeamPage.Size=MainPage.Size
+    TeamPage.Position=MainPage.Position
+    TeamPage.BackgroundTransparency=1
+    TeamPage.Visible=false
+
     local function makeButton(parent,text,pos)
         local btn=Instance.new("TextButton",parent)
         btn.Size=UDim2.new(0.8,0,0,30)
@@ -195,12 +212,9 @@ local function createGUI()
     end
 
     local AimHeadToggle=makeButton(MainPage,"AimHead: OFF",UDim2.new(0.1,0,0,10))
-    local CheckTeamToggle=makeButton(MainPage,"Check Team: OFF",UDim2.new(0.1,0,0,50))
-    local CheckFriendToggle=makeButton(MainPage,"Check Friends: OFF",UDim2.new(0.1,0,0,90))
-    local CheckWallToggle=makeButton(MainPage,"Check Wall: ON",UDim2.new(0.1,0,0,130))
-    local CheckTeamNumToggle=makeButton(MainPage,"Check TeamNum: OFF",UDim2.new(0.1,0,0,170))
-    local AimNPCToggle=makeButton(MainPage,"Aim NPC: OFF",UDim2.new(0.1,0,0,210))
-    -- Auto fire moved to Distance tab (no AutoShot button here now)
+    local CheckWallToggle=makeButton(MainPage,"Check Wall: ON",UDim2.new(0.1,0,0,50))
+    local AimNPCToggle=makeButton(MainPage,"Aim NPC: OFF",UDim2.new(0.1,0,0,90))
+    -- Team-related toggles moved to TeamPage
 
     local TargetBtn=makeButton(SettingPage,"Select Target",UDim2.new(0.1,0,0,10))
     local ESPToggle=makeButton(SettingPage,"ESP Line: OFF",UDim2.new(0.1,0,0,50))
@@ -266,6 +280,67 @@ local function createGUI()
     local AutoFireBtn=makeButton(DistancePage,"Auto Fire: OFF",UDim2.new(0.1,0,0,110))
     -- AutoFireBtn toggles autoShot
 
+    -- Team tab: scrolling list of check types
+    local TeamLabel = Instance.new("TextLabel", TeamPage)
+    TeamLabel.Size = UDim2.new(0.8,0,0,24)
+    TeamLabel.Position = UDim2.new(0.1,0,0,8)
+    TeamLabel.BackgroundTransparency = 1
+    TeamLabel.Text = "Team Checks (each button is one type):"
+    TeamLabel.TextColor3 = Color3.new(1,1,1)
+    TeamLabel.Font = Enum.Font.GothamBold
+    TeamLabel.TextSize = 14
+
+    local TeamScroll = Instance.new("ScrollingFrame", TeamPage)
+    TeamScroll.Size = UDim2.new(0.8,0,0,260)
+    TeamScroll.Position = UDim2.new(0.1,0,0,40)
+    TeamScroll.BackgroundTransparency = 0.9
+    TeamScroll.CanvasSize = UDim2.new(0,0,0,0)
+    TeamScroll.ScrollBarImageColor3 = Color3.fromRGB(100,180,255)
+    TeamScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Instance.new("UICorner", TeamScroll).CornerRadius = UDim.new(0,8)
+
+    local teamListLayout = Instance.new("UIListLayout", TeamScroll)
+    teamListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    teamListLayout.Padding = UDim.new(0,6)
+
+    -- helper to update canvas size (keeps scroll working with many buttons)
+    local function updateTeamCanvas()
+        TeamScroll.CanvasSize = UDim2.new(0,0,0,teamListLayout.AbsoluteContentSize.Y + 12)
+    end
+    teamListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateTeamCanvas)
+
+    -- function to create a team-check button inside the scroll
+    local function makeTeamCheckButton(text, initialState, onToggle)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -10, 0, 30)
+        btn.BackgroundColor3 = Color3.fromRGB(100,180,255)
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 14
+        btn.Text = text .. ": " .. (initialState and "ON" or "OFF")
+        btn.LayoutOrder = #TeamScroll:GetChildren()
+        btn.Parent = TeamScroll
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+
+        btn.MouseButton1Click:Connect(function()
+            local newState = not initialState
+            initialState = newState
+            btn.Text = text .. ": " .. (initialState and "ON" or "OFF")
+            if onToggle then
+                onToggle(initialState)
+            end
+        end)
+
+        updateTeamCanvas()
+        return btn
+    end
+
+    -- create team-check buttons (each button = one type of check)
+    makeTeamCheckButton("Check Team (by Team property)", teamCheck, function(state) teamCheck = state end)
+    makeTeamCheckButton("Check Friends", friendCheck, function(state) friendCheck = state end)
+    makeTeamCheckButton("Check TeamNum (by attribute)", teamNumCheck, function(state) teamNumCheck = state end)
+    -- you can add more check types here later
+
     local TargetFrame=Instance.new("Frame",ScreenGui)
     TargetFrame.Size=UDim2.new(0,220,0,260)
     TargetFrame.Position=UDim2.new(0.5,170,0.5,-130)
@@ -278,7 +353,7 @@ local function createGUI()
     ResetBtn.Text="Reset Target"
     ResetBtn.BackgroundColor3=Color3.fromRGB(100,180,255)
 
-    local aimOn,teamCheck,friendCheck,wallCheck=false,false,false,true
+    local aimOn,wallCheck=false,false
 
     local FOVCircle=Drawing.new("Circle")
     FOVCircle.Visible=false
@@ -301,18 +376,28 @@ local function createGUI()
         MainPage.Visible=true
         SettingPage.Visible=false
         DistancePage.Visible=false
+        TeamPage.Visible=false
     end)
 
     SettingTab.MouseButton1Click:Connect(function()
         MainPage.Visible=false
         SettingPage.Visible=true
         DistancePage.Visible=false
+        TeamPage.Visible=false
     end)
 
     DistanceTab.MouseButton1Click:Connect(function()
         MainPage.Visible=false
         SettingPage.Visible=false
         DistancePage.Visible=true
+        TeamPage.Visible=false
+    end)
+
+    TeamTab.MouseButton1Click:Connect(function()
+        MainPage.Visible=false
+        SettingPage.Visible=false
+        DistancePage.Visible=false
+        TeamPage.Visible=true
     end)
 
     AimHeadToggle.MouseButton1Click:Connect(function()
@@ -325,24 +410,9 @@ local function createGUI()
         end
     end)
 
-    CheckTeamToggle.MouseButton1Click:Connect(function()
-        teamCheck=not teamCheck
-        CheckTeamToggle.Text="Check Team: "..(teamCheck and "ON" or "OFF")
-    end)
-
-    CheckFriendToggle.MouseButton1Click:Connect(function()
-        friendCheck=not friendCheck
-        CheckFriendToggle.Text="Check Friends: "..(friendCheck and "ON" or "OFF")
-    end)
-
     CheckWallToggle.MouseButton1Click:Connect(function()
         wallCheck=not wallCheck
         CheckWallToggle.Text="Check Wall: "..(wallCheck and "ON" or "OFF")
-    end)
-
-    CheckTeamNumToggle.MouseButton1Click:Connect(function()
-        teamNumCheck=not teamNumCheck
-        CheckTeamNumToggle.Text="Check TeamNum: "..(teamNumCheck and "ON" or "OFF")
     end)
 
     AimNPCToggle.MouseButton1Click:Connect(function()
@@ -472,6 +542,7 @@ local function createGUI()
 
                 if humanoid and humanoid.Health>0 then
 
+                    -- team/friend checks now driven by variables in Team tab
                     if (not friendCheck or not player:IsFriendsWith(plr.UserId)) and
                        (not teamCheck or plr.Team~=player.Team) then
 
