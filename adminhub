@@ -69,19 +69,55 @@ toggle.BorderSizePixel = 0
 Instance.new("UICorner",toggle).CornerRadius = UDim.new(1,0)
 
 -------------------------------------------------
+-- TOGGLE DRAG
+-------------------------------------------------
+do
+	local dragging = false
+	local dragInput, mousePos, togglePos
+	
+	toggle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			mousePos = input.Position
+			togglePos = toggle.Position
+			local conn
+			conn = UIS.InputChanged:Connect(function(input2)
+				if input2.UserInputType == Enum.UserInputType.MouseMovement or input2.UserInputType == Enum.UserInputType.Touch then
+					if dragging then
+						local delta = input2.Position - mousePos
+						toggle.Position = UDim2.new(
+							togglePos.X.Scale, togglePos.X.Offset + delta.X,
+							togglePos.Y.Scale, togglePos.Y.Offset + delta.Y
+						)
+					end
+				end
+			end)
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+					conn:Disconnect()
+				end
+			end)
+		end
+	end)
+	
+	toggle.MouseButton1Click:Connect(function()
+		if not dragging then
+			main.Visible = not main.Visible
+		end
+	end)
+end
+
+-------------------------------------------------
 -- MAIN MENU
 -------------------------------------------------
 local main = Instance.new("Frame")
 main.Parent = gui
-main.Size = UDim2.new(0,700,0,350)
-main.Position = UDim2.new(0.5,-350,0.5,-175)
+main.Size = UDim2.new(0,350,0,175)
+main.Position = UDim2.new(0.5,-175,0.5,-87.5)
 main.BackgroundColor3 = Color3.fromRGB(170,220,255)
 Instance.new("UICorner",main)
 main.Visible = false
-
-toggle.MouseButton1Click:Connect(function()
-	main.Visible = not main.Visible
-end)
 
 -------------------------------------------------
 -- CLOSE BUTTON (X) - TOP LEFT
@@ -359,6 +395,8 @@ local commands = {
 	{name = "UnlockTP", cmd = "unlocktp"},
 	{name = "LockFly", cmd = "lockfly"},
 	{name = "Unlock", cmd = "unlockfly"},
+	{name = "LJM", cmd = "/ljm"},
+	{name = "ULJM", cmd = "/uljm"},
 	{name = "hù", cmd = "/sp"},
 }
 
