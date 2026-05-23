@@ -1,11 +1,10 @@
---// BOHUB ADMIN FULL SAVE
-
 -------------------------------------------------
 -- SERVICES
 -------------------------------------------------
 local Players = game:GetService("Players")
 local TextChatService = game:GetService("TextChatService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -27,31 +26,23 @@ end)
 
 -- Save file
 local function saveAdmins()
-
 	if not writefile then return end
-
 	local str = ""
-
 	for name,_ in pairs(adminList) do
 		str = str..name.."\n"
 	end
-
 	writefile(FILE,str)
-
 end
 
 -------------------------------------------------
 -- CHAT COMMAND
 -------------------------------------------------
 local function sendChat(msg)
-
 	if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
 		TextChatService.TextChannels.RBXGeneral:SendAsync(msg)
 	else
-		ReplicatedStorage.DefaultChatSystemChatEvents
-		.SayMessageRequest:FireServer(msg,"All")
+		ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg,"All")
 	end
-
 end
 
 -------------------------------------------------
@@ -111,6 +102,72 @@ closeBtn.MouseButton1Click:Connect(function()
 end)
 
 -------------------------------------------------
+-- DRAG ICON
+-------------------------------------------------
+local dragIcon = Instance.new("ImageLabel")
+dragIcon.Parent = main
+dragIcon.Size = UDim2.new(0,28,0,28)
+dragIcon.Position = UDim2.new(0,40,0,6)
+dragIcon.BackgroundTransparency = 1
+dragIcon.Image = "rbxassetid://16743659815"
+dragIcon.Name = "DragIcon"
+
+do  -- Drag script
+    local dragging = false
+    local dragInput, mousePos, mainPos
+    dragIcon.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            mousePos = input.Position
+            mainPos = main.Position
+            local conn
+            conn = UIS.InputChanged:Connect(function(input2)
+                if input2.UserInputType == Enum.UserInputType.MouseMovement or input2.UserInputType == Enum.UserInputType.Touch then
+                    if dragging then
+                        local delta = input2.Position - mousePos
+                        main.Position = UDim2.new(
+                            mainPos.X.Scale, mainPos.X.Offset + delta.X,
+                            mainPos.Y.Scale, mainPos.Y.Offset + delta.Y
+                        )
+                    end
+                end
+            end)
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    conn:Disconnect()
+                end
+            end)
+        end
+    end)
+end
+
+-------------------------------------------------
+-- ADD TABS
+-------------------------------------------------
+local tab1 = Instance.new("TextButton")
+tab1.Parent = main
+tab1.Size = UDim2.new(0,80,0,28)
+tab1.Position = UDim2.new(0,80,0,6)
+tab1.Text = "Admin"
+tab1.Font = Enum.Font.GothamBold
+tab1.TextSize = 13
+tab1.TextColor3 = Color3.new(1,1,1)
+tab1.BackgroundColor3 = Color3.fromRGB(80,160,255)
+Instance.new("UICorner",tab1)
+
+local tab2 = Instance.new("TextButton")
+tab2.Parent = main
+tab2.Size = UDim2.new(0,80,0,28)
+tab2.Position = UDim2.new(0,165,0,6)
+tab2.Text = "Thời gian"
+tab2.Font = Enum.Font.GothamBold
+tab2.TextSize = 13
+tab2.TextColor3 = Color3.new(1,1,1)
+tab2.BackgroundColor3 = Color3.fromRGB(120,100,255)
+Instance.new("UICorner",tab2)
+
+-------------------------------------------------
 -- TITLE
 -------------------------------------------------
 local title = Instance.new("TextLabel")
@@ -155,12 +212,19 @@ sendBtn.BackgroundColor3 = Color3.fromRGB(100,200,100)
 Instance.new("UICorner",sendBtn)
 
 -------------------------------------------------
--- LEFT SIDE - PLAYERS (SCROLLABLE)
+-- TAB 1 (ADMIN)
 -------------------------------------------------
+local adminPanel = Instance.new("Frame")
+adminPanel.Parent = main
+adminPanel.Size = UDim2.new(1,0,1,-40)
+adminPanel.Position = UDim2.new(0,0,0,40)
+adminPanel.BackgroundTransparency = 1
+
+-- Players - Left
 local playerFrame = Instance.new("Frame")
-playerFrame.Parent = main
+playerFrame.Parent = adminPanel
 playerFrame.Size = UDim2.new(0.48,-8,1,-60)
-playerFrame.Position = UDim2.new(0,8,0,48)
+playerFrame.Position = UDim2.new(0,8,0,8)
 playerFrame.BackgroundColor3 = Color3.fromRGB(210,235,255)
 Instance.new("UICorner",playerFrame)
 
@@ -186,13 +250,11 @@ local playerLayout = Instance.new("UIListLayout")
 playerLayout.Parent = playerScroll
 playerLayout.Padding = UDim.new(0,4)
 
--------------------------------------------------
--- RIGHT SIDE - COMMANDS (STATIC)
--------------------------------------------------
+-- Commands - Right
 local commandFrame = Instance.new("Frame")
-commandFrame.Parent = main
+commandFrame.Parent = adminPanel
 commandFrame.Size = UDim2.new(0.48,-8,1,-60)
-commandFrame.Position = UDim2.new(0.52,0,0,48)
+commandFrame.Position = UDim2.new(0.52,0,0,8)
 commandFrame.BackgroundColor3 = Color3.fromRGB(210,235,255)
 Instance.new("UICorner",commandFrame)
 
@@ -219,6 +281,75 @@ commandLayout.Parent = commandScroll
 commandLayout.Padding = UDim.new(0,4)
 
 -------------------------------------------------
+-- TAB 2 (TIME PANEL)
+-------------------------------------------------
+local timePanel = Instance.new("Frame")
+timePanel.Parent = main
+timePanel.Size = UDim2.new(1,0,1,-40)
+timePanel.Position = UDim2.new(0,0,0,40)
+timePanel.BackgroundTransparency = 1
+timePanel.Visible = false
+
+local timeLabel = Instance.new("TextLabel")
+timeLabel.Parent = timePanel
+timeLabel.Size = UDim2.new(1,0,0,38)
+timeLabel.Position = UDim2.new(0,0,0,0)
+timeLabel.BackgroundTransparency = 1
+timeLabel.Text = "📅 Chọn thời gian cho lệnh /sp"
+timeLabel.Font = Enum.Font.GothamBold
+timeLabel.TextSize = 18
+timeLabel.TextColor3 = Color3.fromRGB(0,80,150)
+
+-- Thời gian options
+local timeList = {2,5,10,20,30,50,90,120}
+local selectedTime = 2 -- Mặc định
+local timeBtns = {}
+
+for i, tval in ipairs(timeList) do
+	local btn = Instance.new("TextButton")
+	btn.Parent = timePanel
+	btn.Size = UDim2.new(0,80,0,40)
+	btn.Position = UDim2.new(0,20 + (i-1)*90,0,50)
+	btn.Text = tostring(tval).." s"
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 15
+	btn.Name = "TimeBtn"..tostring(tval)
+	Instance.new("UICorner",btn)
+	if tval == selectedTime then
+		btn.BackgroundColor3 = Color3.fromRGB(0,200,0)
+		btn.TextColor3 = Color3.new(1,1,1)
+	else
+		btn.BackgroundColor3 = Color3.fromRGB(200,0,0)
+		btn.TextColor3 = Color3.new(1,1,1)
+	end
+	btn.MouseButton1Click:Connect(function()
+		for j,bb in pairs(timeBtns) do
+			bb.BackgroundColor3 = Color3.fromRGB(200,0,0)
+		end
+		selectedTime = tval
+		btn.BackgroundColor3 = Color3.fromRGB(0,200,0)
+	end)
+	timeBtns[#timeBtns+1] = btn
+end
+
+-- Tab switching
+tab1.MouseButton1Click:Connect(function()
+	adminPanel.Visible = true
+	timePanel.Visible = false
+	tab1.BackgroundColor3 = Color3.fromRGB(80,160,255)
+	tab2.BackgroundColor3 = Color3.fromRGB(120,100,255)
+end)
+
+tab2.MouseButton1Click:Connect(function()
+	adminPanel.Visible = false
+	timePanel.Visible = true
+	tab1.BackgroundColor3 = Color3.fromRGB(120,100,255)
+	tab2.BackgroundColor3 = Color3.fromRGB(80,160,255)
+end)
+adminPanel.Visible = true
+timePanel.Visible = false
+
+-------------------------------------------------
 -- COMMAND DATA
 -------------------------------------------------
 local commands = {
@@ -228,6 +359,7 @@ local commands = {
 	{name = "UnlockTP", cmd = "unlocktp"},
 	{name = "LockFly", cmd = "lockfly"},
 	{name = "Unlock", cmd = "unlockfly"},
+	{name = "hù", cmd = "/sp"},
 }
 
 local selectedCommand = nil
@@ -237,7 +369,6 @@ local selectedPlayers = {}
 -- CREATE COMMAND BUTTON
 -------------------------------------------------
 local function createCommandBtn(cmdName, cmdValue)
-
 	local btn = Instance.new("TextButton")
 	btn.Parent = commandScroll
 	btn.Size = UDim2.new(1,-8,0,35)
@@ -248,174 +379,117 @@ local function createCommandBtn(cmdName, cmdValue)
 	btn.TextColor3 = Color3.new(1,1,1)
 	btn.Name = cmdValue
 	Instance.new("UICorner",btn)
-
 	btn.MouseButton1Click:Connect(function()
-		
-		-- Deselect previous
 		if selectedCommand then
 			selectedCommand.BackgroundColor3 = Color3.fromRGB(255,80,80)
 		end
-		
-		-- Select new
 		selectedCommand = btn
 		btn.BackgroundColor3 = Color3.fromRGB(80,200,80)
-		
 	end)
-
 	return btn
-
 end
 
 -------------------------------------------------
 -- CREATE PLAYER BUTTON
 -------------------------------------------------
 local function createPlayerBtn(playerName)
-
 	local isOnline = Players:FindFirstChild(playerName) ~= nil
-	
 	local btn = Instance.new("TextButton")
 	btn.Parent = playerScroll
 	btn.Size = UDim2.new(1,-8,0,35)
-	btn.BackgroundColor3 = Color3.fromRGB(255,80,80) -- Default red (not selected)
+	btn.BackgroundColor3 = Color3.fromRGB(255,80,80)
 	btn.Text = playerName
 	btn.Font = Enum.Font.GothamBold
 	btn.TextSize = 12
 	btn.BorderSizePixel = 2
-	btn.BorderColor3 = Color3.fromRGB(0,0,0) -- Black border
+	btn.BorderColor3 = Color3.fromRGB(0,0,0)
 	btn.Name = playerName
-	
-	-- Text color: green if online, red if offline
 	if isOnline then
-		btn.TextColor3 = Color3.fromRGB(0,180,0) -- Green text
+		btn.TextColor3 = Color3.fromRGB(0,180,0)
 	else
-		btn.TextColor3 = Color3.fromRGB(220,0,0) -- Red text
+		btn.TextColor3 = Color3.fromRGB(220,0,0)
 	end
-	
 	Instance.new("UICorner",btn)
-
 	btn.MouseButton1Click:Connect(function()
-		
 		if selectedPlayers[playerName] then
-			-- Deselect
 			selectedPlayers[playerName] = nil
-			btn.BackgroundColor3 = Color3.fromRGB(255,80,80) -- Back to red
-			
+			btn.BackgroundColor3 = Color3.fromRGB(255,80,80)
 		else
-			-- Select
 			selectedPlayers[playerName] = true
-			btn.BackgroundColor3 = Color3.fromRGB(80,200,80) -- Green when selected
+			btn.BackgroundColor3 = Color3.fromRGB(80,200,80)
 		end
-		
 	end)
-
 	return btn
-
 end
 
 -------------------------------------------------
 -- REFRESH COMMAND LIST
 -------------------------------------------------
 local function refreshCommandList()
-
 	for _,v in pairs(commandScroll:GetChildren()) do
 		if v:IsA("TextButton") then
 			v:Destroy()
 		end
 	end
-
 	for _,cmd in pairs(commands) do
 		createCommandBtn(cmd.name, cmd.cmd)
 	end
-
 	commandLayout:ApplyLayout()
 	commandScroll.CanvasSize = UDim2.new(0,0,0,commandLayout.AbsoluteContentSize.Y)
-
 end
 
 -------------------------------------------------
 -- REFRESH PLAYER LIST
 -------------------------------------------------
 local function refreshPlayerList()
-
 	for _,v in pairs(playerScroll:GetChildren()) do
 		if v:IsA("TextButton") then
 			v:Destroy()
 		end
 	end
-
 	local playerList = {}
-	
-	-- Only show players in adminList (from file)
 	for name,_ in pairs(adminList) do
 		table.insert(playerList, name)
 	end
-
 	table.sort(playerList)
-
 	for _,name in pairs(playerList) do
 		createPlayerBtn(name)
 	end
-
 	playerLayout:ApplyLayout()
 	playerScroll.CanvasSize = UDim2.new(0,0,0,playerLayout.AbsoluteContentSize.Y)
-
 end
 
 -------------------------------------------------
 -- SEND COMMAND
 -------------------------------------------------
 sendBtn.MouseButton1Click:Connect(function()
-
-	if not selectedCommand then
-		return
-	end
-
+	if not selectedCommand then return end
 	local playerCount = 0
-	for _,_ in pairs(selectedPlayers) do
-		playerCount = playerCount + 1
-	end
-
-	if playerCount == 0 then
-		return
-	end
-
+	for _,_ in pairs(selectedPlayers) do playerCount = playerCount + 1 end
+	if playerCount == 0 then return end
 	local cmdName = selectedCommand.Name
-
-	if playerCount == 1 then
-		-- Single player
-		for playerName,_ in pairs(selectedPlayers) do
-			sendChat(cmdName.." "..playerName)
-		end
-	else
-		-- Multiple players
-		for playerName,_ in pairs(selectedPlayers) do
+	for playerName,_ in pairs(selectedPlayers) do
+		if cmdName == "/sp" then
+			sendChat(cmdName.." "..tostring(selectedTime).." "..playerName)
+		else
 			sendChat(cmdName.." "..playerName)
 		end
 	end
-
 end)
 
 -------------------------------------------------
 -- DETECT /me
 -------------------------------------------------
 local function watchPlayer(plr)
-
 	plr.Chatted:Connect(function(msg)
-
 		if string.lower(msg):find("/me") then
-
 			if not adminList[plr.Name] then
-
 				adminList[plr.Name] = true
 				saveAdmins()
 				refreshPlayerList()
-
 			end
-
 		end
-
 	end)
-
 end
 
 -------------------------------------------------
