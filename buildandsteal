@@ -1,0 +1,620 @@
+--// MINI BLUE SKY GUI + TP HOME + BACK + FLY + AUTO BUY
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local plr = Players.LocalPlayer
+
+--========================
+-- GUI
+--========================
+local gui = Instance.new("ScreenGui")
+gui.Parent = game.CoreGui
+gui.ResetOnSpawn = false
+
+local SKY = Color3.fromRGB(80,170,255)
+local SKY_DARK = Color3.fromRGB(40,120,220)
+local SKY_LIGHT = Color3.fromRGB(120,200,255)
+local BG = Color3.fromRGB(15,25,45)
+
+--========================
+-- MENU BUTTON
+--========================
+local menuBtn = Instance.new("TextButton")
+menuBtn.Parent = gui
+menuBtn.Size = UDim2.new(0,22,0,22)
+menuBtn.Position = UDim2.new(0,8,0.5,-11)
+menuBtn.Text = "M"
+menuBtn.BackgroundColor3 = SKY_DARK
+menuBtn.TextColor3 = Color3.new(1,1,1)
+menuBtn.TextScaled = true
+menuBtn.Font = Enum.Font.GothamBold
+menuBtn.Active = true
+menuBtn.Draggable = true
+menuBtn.BorderSizePixel = 0
+
+Instance.new("UICorner",menuBtn).CornerRadius = UDim.new(1,0)
+
+--========================
+-- FRAME
+--========================
+local frame = Instance.new("Frame")
+frame.Parent = gui
+frame.Size = UDim2.new(0,95,0,185)
+frame.Position = UDim2.new(0.5,-47,0.5,-92)
+frame.BackgroundColor3 = BG
+frame.Active = true
+frame.Draggable = true
+frame.BorderSizePixel = 0
+
+Instance.new("UICorner",frame).CornerRadius = UDim.new(0,8)
+
+local stroke = Instance.new("UIStroke",frame)
+stroke.Color = SKY_LIGHT
+stroke.Thickness = 1
+
+local layout = Instance.new("UIListLayout",frame)
+layout.Padding = UDim.new(0,3)
+
+--========================
+-- BUTTON FUNCTION
+--========================
+local function Button(txt)
+
+	local b = Instance.new("TextButton")
+
+	b.Parent = frame
+	b.Size = UDim2.new(1,-6,0,15)
+
+	b.BackgroundColor3 = SKY
+	b.TextColor3 = Color3.new(1,1,1)
+
+	b.TextScaled = true
+	b.Font = Enum.Font.GothamBold
+	b.Text = txt
+	b.BorderSizePixel = 0
+
+	Instance.new("UICorner",b).CornerRadius = UDim.new(0,5)
+
+	return b
+end
+
+--========================
+-- BUTTONS
+--========================
+local noclipBtn = Button("NC OFF")
+local saveBtn = Button("SAVE")
+local tpBtn = Button("TP OFF")
+local backBtn = Button("BACK OFF")
+local loopBtn = Button("PAUSE")
+local flyBtn = Button("FLY OFF")
+local buyBtn = Button("BUY OFF")
+local hackerBtn = Button("HACK OFF")
+
+--========================
+-- VARIABLES
+--========================
+local noclip = false
+local tpStep = false
+local backMode = false
+local pauseTp = false
+local flyMode = false
+
+local autoBuy = false
+local autoHacker = false
+
+local savedPos = nil
+local backPos = nil
+local pausedCFrame = nil
+
+--========================
+-- MENU
+--========================
+menuBtn.MouseButton1Click:Connect(function()
+	frame.Visible = not frame.Visible
+end)
+
+--========================
+-- NOCLIP
+--========================
+noclipBtn.MouseButton1Click:Connect(function()
+
+	noclip = not noclip
+
+	noclipBtn.Text =
+		noclip and "NC ON"
+		or "NC OFF"
+
+end)
+
+RunService.Stepped:Connect(function()
+
+	if noclip and plr.Character then
+
+		for _,v in pairs(plr.Character:GetDescendants()) do
+
+			if v:IsA("BasePart") then
+				v.CanCollide = false
+			end
+
+		end
+
+	end
+
+end)
+
+--========================
+-- SAVE POS
+--========================
+saveBtn.MouseButton1Click:Connect(function()
+
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+	if hrp then
+
+		savedPos = hrp.Position
+
+		saveBtn.Text = "OK"
+
+		task.wait(0.5)
+
+		saveBtn.Text = "SAVE"
+
+	end
+
+end)
+
+--========================
+-- TP
+--========================
+tpBtn.MouseButton1Click:Connect(function()
+
+	if not savedPos then return end
+
+	-- lưu vị trí hiện tại cho BACK
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+	if hrp and not tpStep then
+		backPos = hrp.Position
+	end
+
+	tpStep = not tpStep
+
+	if tpStep then
+		backMode = false
+		backBtn.Text = "BACK OFF"
+	end
+
+	tpBtn.Text =
+		tpStep and "TP ON"
+		or "TP OFF"
+
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+	if not tpStep then
+
+		if hum then
+			hum.PlatformStand = false
+		end
+
+		if hrp then
+			hrp.CFrame =
+				CFrame.new(
+					hrp.Position + Vector3.new(0,3,0)
+				)
+		end
+
+	end
+
+end)
+
+--========================
+-- BACK
+--========================
+backBtn.MouseButton1Click:Connect(function()
+
+	if not backPos then return end
+
+	backMode = not backMode
+
+	if backMode then
+		tpStep = false
+		tpBtn.Text = "TP OFF"
+	end
+
+	backBtn.Text =
+		backMode and "BACK ON"
+		or "BACK OFF"
+
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+	if not backMode then
+
+		if hum then
+			hum.PlatformStand = false
+		end
+
+		if hrp then
+			hrp.CFrame =
+				CFrame.new(
+					hrp.Position + Vector3.new(0,3,0)
+				)
+		end
+
+	end
+
+end)
+
+--========================
+-- PAUSE TP
+--========================
+loopBtn.MouseButton1Click:Connect(function()
+
+	pauseTp = not pauseTp
+
+	loopBtn.Text =
+		pauseTp and "STOP"
+		or "PAUSE"
+
+	if pauseTp then
+
+		local char = plr.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+		if hrp then
+			pausedCFrame = hrp.CFrame
+		end
+
+	end
+
+end)
+
+--========================
+-- FLY MODE
+--========================
+flyBtn.MouseButton1Click:Connect(function()
+
+	flyMode = not flyMode
+
+	flyBtn.Text =
+		flyMode and "FLY ON"
+		or "FLY OFF"
+
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+	if flyMode then
+
+		if hum then
+			hum.PlatformStand = true
+		end
+
+	else
+
+		if hum then
+			hum.PlatformStand = false
+		end
+
+		if hrp then
+			hrp.CFrame =
+				CFrame.new(
+					hrp.Position + Vector3.new(0,3,0)
+				)
+		end
+
+	end
+
+end)
+
+--========================
+-- AUTO BUY MAGMA
+--========================
+buyBtn.MouseButton1Click:Connect(function()
+
+	autoBuy = not autoBuy
+
+	buyBtn.Text =
+		autoBuy and "BUY ON"
+		or "BUY OFF"
+
+end)
+
+task.spawn(function()
+
+	while task.wait(1) do
+
+		if autoBuy then
+
+			pcall(function()
+
+				local args = {
+					"bypassthis2",
+					44394224,
+					"Magma Block",
+					1
+				}
+
+				ReplicatedStorage
+					:WaitForChild("RemoteEvent")
+					:FireServer(unpack(args))
+
+			end)
+
+		end
+
+	end
+
+end)
+
+--========================
+-- AUTO BUY HACKER
+--========================
+hackerBtn.MouseButton1Click:Connect(function()
+
+	autoHacker = not autoHacker
+
+	hackerBtn.Text =
+		autoHacker and "HACK ON"
+		or "HACK OFF"
+
+end)
+
+task.spawn(function()
+
+	while task.wait(1) do
+
+		if autoHacker then
+
+			pcall(function()
+
+				local args = {
+					"bypassthis2",
+					44394224,
+					"Hacker Block",
+					1
+				}
+
+				ReplicatedStorage
+					:WaitForChild("RemoteEvent")
+					:FireServer(unpack(args))
+
+			end)
+
+		end
+
+	end
+
+end)
+
+--========================
+-- MAIN SYSTEM
+--========================
+RunService.Heartbeat:Connect(function()
+
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+	if not hrp then return end
+
+	--====================
+	-- FLY
+	--====================
+	if flyMode and not tpStep and not backMode then
+
+		local hum = char:FindFirstChildOfClass("Humanoid")
+
+		if hum then
+			hum.PlatformStand = true
+		end
+
+		local moveDir = hum.MoveDirection
+
+		if moveDir.Magnitude > 0 then
+
+			local speed = 1.2
+
+			local newPos = hrp.Position + Vector3.new(
+				moveDir.X * speed,
+				0,
+				moveDir.Z * speed
+			)
+
+			local lookPos = newPos + Vector3.new(
+				moveDir.X,
+				0,
+				moveDir.Z
+			)
+
+			hrp.CFrame =
+				CFrame.lookAt(
+					Vector3.new(newPos.X,1.7,newPos.Z),
+					Vector3.new(lookPos.X,1.7,lookPos.Z)
+				)
+				* CFrame.Angles(math.rad(90),0,0)
+
+		else
+
+			hrp.CFrame =
+				CFrame.new(
+					hrp.Position.X,
+					1.7,
+					hrp.Position.Z
+				)
+				* CFrame.Angles(math.rad(90),0,0)
+
+		end
+
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+
+		return
+	end
+
+	--====================
+	-- PAUSE
+	--====================
+	if pauseTp then
+
+		if pausedCFrame then
+
+			hrp.CFrame = pausedCFrame
+
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+
+			local hum = char:FindFirstChildOfClass("Humanoid")
+
+			if hum then
+				hum.PlatformStand = true
+			end
+
+		end
+
+		return
+	end
+
+	--====================
+	-- TP TO SAVE
+	--====================
+	if tpStep and savedPos then
+
+		local targetPos = Vector3.new(
+			savedPos.X,
+			1.7,
+			savedPos.Z
+		)
+
+		local current = hrp.Position
+
+		local dir = targetPos - current
+		local dist = dir.Magnitude
+
+		local hum = char:FindFirstChildOfClass("Humanoid")
+
+		-- tới nơi -> OFF
+		if dist <= 2 then
+
+			tpStep = false
+			tpBtn.Text = "TP OFF"
+
+			if hum then
+				hum.PlatformStand = false
+			end
+
+			hrp.CFrame =
+				CFrame.new(
+					hrp.Position + Vector3.new(0,3,0)
+				)
+
+			return
+		end
+
+		local step = math.min(1.6, dist)
+
+		local move = dir.Unit * step
+
+		local newPos = current + Vector3.new(
+			move.X,
+			0,
+			move.Z
+		)
+
+		if hum then
+			hum.PlatformStand = true
+		end
+
+		local lookPos = newPos + Vector3.new(
+			move.X,
+			0,
+			move.Z
+		)
+
+		hrp.CFrame =
+			CFrame.lookAt(
+				Vector3.new(newPos.X,1.7,newPos.Z),
+				Vector3.new(lookPos.X,1.7,lookPos.Z)
+			)
+			* CFrame.Angles(math.rad(90),0,0)
+
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+
+		return
+	end
+
+	--====================
+	-- BACK
+	--====================
+	if backMode and backPos then
+
+		local targetPos = Vector3.new(
+			backPos.X,
+			1.7,
+			backPos.Z
+		)
+
+		local current = hrp.Position
+
+		local dir = targetPos - current
+		local dist = dir.Magnitude
+
+		local hum = char:FindFirstChildOfClass("Humanoid")
+
+		-- tới nơi -> OFF
+		if dist <= 2 then
+
+			backMode = false
+			backBtn.Text = "BACK OFF"
+
+			if hum then
+				hum.PlatformStand = false
+			end
+
+			hrp.CFrame =
+				CFrame.new(
+					hrp.Position + Vector3.new(0,3,0)
+				)
+
+			return
+		end
+
+		local step = math.min(1.6, dist)
+
+		local move = dir.Unit * step
+
+		local newPos = current + Vector3.new(
+			move.X,
+			0,
+			move.Z
+		)
+
+		if hum then
+			hum.PlatformStand = true
+		end
+
+		local lookPos = newPos + Vector3.new(
+			move.X,
+			0,
+			move.Z
+		)
+
+		hrp.CFrame =
+			CFrame.lookAt(
+				Vector3.new(newPos.X,1.7,newPos.Z),
+				Vector3.new(lookPos.X,1.7,lookPos.Z)
+			)
+			* CFrame.Angles(math.rad(90),0,0)
+
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+
+		return
+	end
+
+end)
