@@ -80,7 +80,7 @@ Instance.new("UICorner",main)
 main.Visible = false
 
 -------------------------------------------------
--- CLOSE BUTTON (X) - TOP LEFT
+-- CLOSE BUTTON (X)
 -------------------------------------------------
 local closeBtn = Instance.new("TextButton")
 closeBtn.Parent = main
@@ -108,7 +108,7 @@ dragIcon.BackgroundTransparency = 1
 dragIcon.Image = "rbxassetid://16743659815"
 dragIcon.Name = "DragIcon"
 
-do  -- Drag script
+do
     local dragging = false
     local dragInput, mousePos, mainPos
     dragIcon.InputBegan:Connect(function(input)
@@ -168,12 +168,12 @@ topLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 topLayout.Padding = UDim.new(0,8)
 
 -------------------------------------------------
--- ADD TABS
+-- TABS
 -------------------------------------------------
 local tab1 = Instance.new("TextButton")
 tab1.Parent = topBtnContainer
 tab1.Size = UDim2.new(0,70,0,28)
-tab1.Text = "Admin"
+tab1.Text = "Command"
 tab1.Font = Enum.Font.GothamBold
 tab1.TextSize = 13
 tab1.TextColor3 = Color3.new(1,1,1)
@@ -191,47 +191,30 @@ tab2.BackgroundColor3 = Color3.fromRGB(120,100,255)
 Instance.new("UICorner",tab2)
 
 -------------------------------------------------
--- /AD BUTTON
+-- ADMIN BUTTON (Clear Selection)
 -------------------------------------------------
-local adBtn = Instance.new("TextButton")
-adBtn.Parent = topBtnContainer
-adBtn.Size = UDim2.new(0,50,0,28)
-adBtn.Text = "/ad"
-adBtn.Font = Enum.Font.GothamBold
-adBtn.TextSize = 12
-adBtn.TextColor3 = Color3.new(1,1,1)
-adBtn.BackgroundColor3 = Color3.fromRGB(80,160,255)
-Instance.new("UICorner",adBtn)
-
-adBtn.MouseButton1Click:Connect(function()
-	sendChat("/ad")
-end)
+local adminBtn = Instance.new("TextButton")
+adminBtn.Parent = topBtnContainer
+adminBtn.Size = UDim2.new(0,70,0,28)
+adminBtn.Text = "Admin"
+adminBtn.Font = Enum.Font.GothamBold
+adminBtn.TextSize = 13
+adminBtn.TextColor3 = Color3.new(1,1,1)
+adminBtn.BackgroundColor3 = Color3.fromRGB(255,100,100)
+Instance.new("UICorner",adminBtn)
 
 -------------------------------------------------
--- SEND COMMAND BUTTON
+-- TAB 1 (COMMAND)
 -------------------------------------------------
-local sendBtn = Instance.new("TextButton")
-sendBtn.Parent = topBtnContainer
-sendBtn.Size = UDim2.new(0,70,0,28)
-sendBtn.Text = "Send CMD"
-sendBtn.Font = Enum.Font.GothamBold
-sendBtn.TextSize = 11
-sendBtn.TextColor3 = Color3.new(1,1,1)
-sendBtn.BackgroundColor3 = Color3.fromRGB(100,200,100)
-Instance.new("UICorner",sendBtn)
-
--------------------------------------------------
--- TAB 1 (ADMIN)
--------------------------------------------------
-local adminPanel = Instance.new("Frame")
-adminPanel.Parent = main
-adminPanel.Size = UDim2.new(1,0,1,-78)
-adminPanel.Position = UDim2.new(0,0,0,78)
-adminPanel.BackgroundTransparency = 1
+local commandPanel = Instance.new("Frame")
+commandPanel.Parent = main
+commandPanel.Size = UDim2.new(1,0,1,-78)
+commandPanel.Position = UDim2.new(0,0,0,78)
+commandPanel.BackgroundTransparency = 1
 
 -- Players - Left
 local playerFrame = Instance.new("Frame")
-playerFrame.Parent = adminPanel
+playerFrame.Parent = commandPanel
 playerFrame.Size = UDim2.new(0.48,-8,1,0)
 playerFrame.Position = UDim2.new(0,8,0,0)
 playerFrame.BackgroundColor3 = Color3.fromRGB(210,235,255)
@@ -261,7 +244,7 @@ playerLayout.Padding = UDim.new(0,4)
 
 -- Commands - Right
 local commandFrame = Instance.new("Frame")
-commandFrame.Parent = adminPanel
+commandFrame.Parent = commandPanel
 commandFrame.Size = UDim2.new(0.48,-8,1,0)
 commandFrame.Position = UDim2.new(0.52,0,0,0)
 commandFrame.BackgroundColor3 = Color3.fromRGB(210,235,255)
@@ -341,16 +324,18 @@ for i, tval in ipairs(timeList) do
 	timeBtns[#timeBtns+1] = btn
 end
 
--- Tab switching
+-------------------------------------------------
+-- TAB SWITCHING
+-------------------------------------------------
 tab1.MouseButton1Click:Connect(function()
-	adminPanel.Visible = true
+	commandPanel.Visible = true
 	timePanel.Visible = false
 	tab1.BackgroundColor3 = Color3.fromRGB(80,160,255)
 	tab2.BackgroundColor3 = Color3.fromRGB(120,100,255)
 end)
 
 tab2.MouseButton1Click:Connect(function()
-	adminPanel.Visible = false
+	commandPanel.Visible = false
 	timePanel.Visible = true
 	tab1.BackgroundColor3 = Color3.fromRGB(120,100,255)
 	tab2.BackgroundColor3 = Color3.fromRGB(80,160,255)
@@ -511,8 +496,41 @@ local function refreshPlayerList()
 end
 
 -------------------------------------------------
--- SEND COMMAND
+-- ADMIN BUTTON - Clear All Selections
 -------------------------------------------------
+adminBtn.MouseButton1Click:Connect(function()
+	selectedPlayers = {}
+	selectedCommand = nil
+	
+	-- Reset player buttons
+	for _,v in pairs(playerScroll:GetChildren()) do
+		if v:IsA("TextButton") then
+			v.BackgroundColor3 = Color3.fromRGB(255,80,80)
+		end
+	end
+	
+	-- Reset command buttons
+	for _,v in pairs(commandScroll:GetChildren()) do
+		if v:IsA("TextButton") then
+			v.BackgroundColor3 = Color3.fromRGB(255,80,80)
+		end
+	end
+end)
+
+-------------------------------------------------
+-- SEND COMMAND BUTTON
+-------------------------------------------------
+local sendBtn = Instance.new("TextButton")
+sendBtn.Parent = commandPanel
+sendBtn.Size = UDim2.new(0.4,0,0,35)
+sendBtn.Position = UDim2.new(0.3,0,1,-50)
+sendBtn.Text = "Send CMD"
+sendBtn.Font = Enum.Font.GothamBold
+sendBtn.TextSize = 14
+sendBtn.TextColor3 = Color3.new(1,1,1)
+sendBtn.BackgroundColor3 = Color3.fromRGB(100,200,100)
+Instance.new("UICorner",sendBtn)
+
 sendBtn.MouseButton1Click:Connect(function()
 	if not selectedCommand then return end
 	local playerCount = 0
@@ -522,18 +540,12 @@ sendBtn.MouseButton1Click:Connect(function()
 	local cmdName = selectedCommand.Name
 	for playerName,_ in pairs(selectedPlayers) do
 		if cmdName == "/sp" then
-			-- Lệnh /sp cần thêm thời gian
 			sendChat(cmdName.." "..tostring(selectedTime).." "..playerName)
-		elseif cmdName == "/lhb" or cmdName == "/ulhb" then
-			-- Lệnh /lhb và /ulhb chỉ cần tên admin
-			sendChat(cmdName.." "..playerName)
 		else
-			-- Các lệnh khác gửi lệnh + tên player
 			sendChat(cmdName.." "..playerName)
 		end
 	end
 	
-	-- Reset lựa chọn sau khi gửi
 	selectedPlayers = {}
 	for _,v in pairs(playerScroll:GetChildren()) do
 		if v:IsA("TextButton") then
