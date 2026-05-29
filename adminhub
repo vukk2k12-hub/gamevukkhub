@@ -69,52 +69,12 @@ toggle.BorderSizePixel = 0
 Instance.new("UICorner",toggle).CornerRadius = UDim.new(1,0)
 
 -------------------------------------------------
--- TOGGLE DRAG
--------------------------------------------------
-do
-	local dragging = false
-	local dragInput, mousePos, togglePos
-	
-	toggle.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			mousePos = input.Position
-			togglePos = toggle.Position
-			local conn
-			conn = UIS.InputChanged:Connect(function(input2)
-				if input2.UserInputType == Enum.UserInputType.MouseMovement or input2.UserInputType == Enum.UserInputType.Touch then
-					if dragging then
-						local delta = input2.Position - mousePos
-						toggle.Position = UDim2.new(
-							togglePos.X.Scale, togglePos.X.Offset + delta.X,
-							togglePos.Y.Scale, togglePos.Y.Offset + delta.Y
-						)
-					end
-				end
-			end)
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-					conn:Disconnect()
-				end
-			end)
-		end
-	end)
-	
-	toggle.MouseButton1Click:Connect(function()
-		if not dragging then
-			main.Visible = not main.Visible
-		end
-	end)
-end
-
--------------------------------------------------
 -- MAIN MENU
 -------------------------------------------------
 local main = Instance.new("Frame")
 main.Parent = gui
-main.Size = UDim2.new(0,350,0,175)
-main.Position = UDim2.new(0.5,-175,0.5,-87.5)
+main.Size = UDim2.new(0,350,0,300)
+main.Position = UDim2.new(0.5,-175,0.5,-150)
 main.BackgroundColor3 = Color3.fromRGB(170,220,255)
 Instance.new("UICorner",main)
 main.Visible = false
@@ -179,31 +139,6 @@ do  -- Drag script
 end
 
 -------------------------------------------------
--- ADD TABS
--------------------------------------------------
-local tab1 = Instance.new("TextButton")
-tab1.Parent = main
-tab1.Size = UDim2.new(0,80,0,28)
-tab1.Position = UDim2.new(0,80,0,6)
-tab1.Text = "Admin"
-tab1.Font = Enum.Font.GothamBold
-tab1.TextSize = 13
-tab1.TextColor3 = Color3.new(1,1,1)
-tab1.BackgroundColor3 = Color3.fromRGB(80,160,255)
-Instance.new("UICorner",tab1)
-
-local tab2 = Instance.new("TextButton")
-tab2.Parent = main
-tab2.Size = UDim2.new(0,80,0,28)
-tab2.Position = UDim2.new(0,165,0,6)
-tab2.Text = "Thời gian"
-tab2.Font = Enum.Font.GothamBold
-tab2.TextSize = 13
-tab2.TextColor3 = Color3.new(1,1,1)
-tab2.BackgroundColor3 = Color3.fromRGB(120,100,255)
-Instance.new("UICorner",tab2)
-
--------------------------------------------------
 -- TITLE
 -------------------------------------------------
 local title = Instance.new("TextLabel")
@@ -216,15 +151,54 @@ title.TextSize = 20
 title.TextColor3 = Color3.fromRGB(30,60,100)
 
 -------------------------------------------------
+-- TOP BUTTON CONTAINER
+-------------------------------------------------
+local topBtnContainer = Instance.new("Frame")
+topBtnContainer.Parent = main
+topBtnContainer.Size = UDim2.new(1,0,0,38)
+topBtnContainer.Position = UDim2.new(0,0,0,40)
+topBtnContainer.BackgroundTransparency = 1
+topBtnContainer.BorderSizePixel = 0
+
+local topLayout = Instance.new("UIListLayout")
+topLayout.Parent = topBtnContainer
+topLayout.FillDirection = Enum.FillDirection.Horizontal
+topLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+topLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+topLayout.Padding = UDim.new(0,8)
+
+-------------------------------------------------
+-- ADD TABS
+-------------------------------------------------
+local tab1 = Instance.new("TextButton")
+tab1.Parent = topBtnContainer
+tab1.Size = UDim2.new(0,70,0,28)
+tab1.Text = "Admin"
+tab1.Font = Enum.Font.GothamBold
+tab1.TextSize = 13
+tab1.TextColor3 = Color3.new(1,1,1)
+tab1.BackgroundColor3 = Color3.fromRGB(80,160,255)
+Instance.new("UICorner",tab1)
+
+local tab2 = Instance.new("TextButton")
+tab2.Parent = topBtnContainer
+tab2.Size = UDim2.new(0,70,0,28)
+tab2.Text = "Thời gian"
+tab2.Font = Enum.Font.GothamBold
+tab2.TextSize = 13
+tab2.TextColor3 = Color3.new(1,1,1)
+tab2.BackgroundColor3 = Color3.fromRGB(120,100,255)
+Instance.new("UICorner",tab2)
+
+-------------------------------------------------
 -- /AD BUTTON
 -------------------------------------------------
 local adBtn = Instance.new("TextButton")
-adBtn.Parent = main
-adBtn.Size = UDim2.new(0,60,0,28)
-adBtn.Position = UDim2.new(1,-130,0,6)
+adBtn.Parent = topBtnContainer
+adBtn.Size = UDim2.new(0,50,0,28)
 adBtn.Text = "/ad"
 adBtn.Font = Enum.Font.GothamBold
-adBtn.TextSize = 14
+adBtn.TextSize = 12
 adBtn.TextColor3 = Color3.new(1,1,1)
 adBtn.BackgroundColor3 = Color3.fromRGB(80,160,255)
 Instance.new("UICorner",adBtn)
@@ -237,12 +211,11 @@ end)
 -- SEND COMMAND BUTTON
 -------------------------------------------------
 local sendBtn = Instance.new("TextButton")
-sendBtn.Parent = main
-sendBtn.Size = UDim2.new(0,80,0,28)
-sendBtn.Position = UDim2.new(1,-210,0,6)
+sendBtn.Parent = topBtnContainer
+sendBtn.Size = UDim2.new(0,70,0,28)
 sendBtn.Text = "Send CMD"
 sendBtn.Font = Enum.Font.GothamBold
-sendBtn.TextSize = 12
+sendBtn.TextSize = 11
 sendBtn.TextColor3 = Color3.new(1,1,1)
 sendBtn.BackgroundColor3 = Color3.fromRGB(100,200,100)
 Instance.new("UICorner",sendBtn)
@@ -252,15 +225,15 @@ Instance.new("UICorner",sendBtn)
 -------------------------------------------------
 local adminPanel = Instance.new("Frame")
 adminPanel.Parent = main
-adminPanel.Size = UDim2.new(1,0,1,-40)
-adminPanel.Position = UDim2.new(0,0,0,40)
+adminPanel.Size = UDim2.new(1,0,1,-78)
+adminPanel.Position = UDim2.new(0,0,0,78)
 adminPanel.BackgroundTransparency = 1
 
 -- Players - Left
 local playerFrame = Instance.new("Frame")
 playerFrame.Parent = adminPanel
-playerFrame.Size = UDim2.new(0.48,-8,1,-60)
-playerFrame.Position = UDim2.new(0,8,0,8)
+playerFrame.Size = UDim2.new(0.48,-8,1,0)
+playerFrame.Position = UDim2.new(0,8,0,0)
 playerFrame.BackgroundColor3 = Color3.fromRGB(210,235,255)
 Instance.new("UICorner",playerFrame)
 
@@ -289,8 +262,8 @@ playerLayout.Padding = UDim.new(0,4)
 -- Commands - Right
 local commandFrame = Instance.new("Frame")
 commandFrame.Parent = adminPanel
-commandFrame.Size = UDim2.new(0.48,-8,1,-60)
-commandFrame.Position = UDim2.new(0.52,0,0,8)
+commandFrame.Size = UDim2.new(0.48,-8,1,0)
+commandFrame.Position = UDim2.new(0.52,0,0,0)
 commandFrame.BackgroundColor3 = Color3.fromRGB(210,235,255)
 Instance.new("UICorner",commandFrame)
 
@@ -321,8 +294,8 @@ commandLayout.Padding = UDim.new(0,4)
 -------------------------------------------------
 local timePanel = Instance.new("Frame")
 timePanel.Parent = main
-timePanel.Size = UDim2.new(1,0,1,-40)
-timePanel.Position = UDim2.new(0,0,0,40)
+timePanel.Size = UDim2.new(1,0,1,-78)
+timePanel.Position = UDim2.new(0,0,0,78)
 timePanel.BackgroundTransparency = 1
 timePanel.Visible = false
 
@@ -338,17 +311,17 @@ timeLabel.TextColor3 = Color3.fromRGB(0,80,150)
 
 -- Thời gian options
 local timeList = {2,5,10,20,30,50,90,120}
-local selectedTime = 2 -- Mặc định
+local selectedTime = 2
 local timeBtns = {}
 
 for i, tval in ipairs(timeList) do
 	local btn = Instance.new("TextButton")
 	btn.Parent = timePanel
-	btn.Size = UDim2.new(0,80,0,40)
-	btn.Position = UDim2.new(0,20 + (i-1)*90,0,50)
+	btn.Size = UDim2.new(0,70,0,40)
+	btn.Position = UDim2.new(0,15 + (i-1)*40,0,50)
 	btn.Text = tostring(tval).." s"
 	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = 15
+	btn.TextSize = 13
 	btn.Name = "TimeBtn"..tostring(tval)
 	Instance.new("UICorner",btn)
 	if tval == selectedTime then
@@ -382,8 +355,46 @@ tab2.MouseButton1Click:Connect(function()
 	tab1.BackgroundColor3 = Color3.fromRGB(120,100,255)
 	tab2.BackgroundColor3 = Color3.fromRGB(80,160,255)
 end)
-adminPanel.Visible = true
-timePanel.Visible = false
+
+-------------------------------------------------
+-- TOGGLE DRAG
+-------------------------------------------------
+do
+	local dragging = false
+	local dragInput, mousePos, togglePos
+	
+	toggle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			mousePos = input.Position
+			togglePos = toggle.Position
+			local conn
+			conn = UIS.InputChanged:Connect(function(input2)
+				if input2.UserInputType == Enum.UserInputType.MouseMovement or input2.UserInputType == Enum.UserInputType.Touch then
+					if dragging then
+						local delta = input2.Position - mousePos
+						toggle.Position = UDim2.new(
+							togglePos.X.Scale, togglePos.X.Offset + delta.X,
+							togglePos.Y.Scale, togglePos.Y.Offset + delta.Y
+						)
+					end
+				end
+			end)
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+					conn:Disconnect()
+				end
+			end)
+		end
+	end)
+	
+	toggle.MouseButton1Click:Connect(function()
+		if not dragging then
+			main.Visible = not main.Visible
+		end
+	end)
+end
 
 -------------------------------------------------
 -- COMMAND DATA
@@ -398,6 +409,8 @@ local commands = {
 	{name = "LJM", cmd = "/ljm"},
 	{name = "ULJM", cmd = "/uljm"},
 	{name = "hù", cmd = "/sp"},
+	{name = "LHB", cmd = "/lhb"},
+	{name = "ULHB", cmd = "/ulhb"},
 }
 
 local selectedCommand = nil
@@ -505,12 +518,26 @@ sendBtn.MouseButton1Click:Connect(function()
 	local playerCount = 0
 	for _,_ in pairs(selectedPlayers) do playerCount = playerCount + 1 end
 	if playerCount == 0 then return end
+	
 	local cmdName = selectedCommand.Name
 	for playerName,_ in pairs(selectedPlayers) do
 		if cmdName == "/sp" then
+			-- Lệnh /sp cần thêm thời gian
 			sendChat(cmdName.." "..tostring(selectedTime).." "..playerName)
-		else
+		elseif cmdName == "/lhb" or cmdName == "/ulhb" then
+			-- Lệnh /lhb và /ulhb chỉ cần tên admin
 			sendChat(cmdName.." "..playerName)
+		else
+			-- Các lệnh khác gửi lệnh + tên player
+			sendChat(cmdName.." "..playerName)
+		end
+	end
+	
+	-- Reset lựa chọn sau khi gửi
+	selectedPlayers = {}
+	for _,v in pairs(playerScroll:GetChildren()) do
+		if v:IsA("TextButton") then
+			v.BackgroundColor3 = Color3.fromRGB(255,80,80)
 		end
 	end
 end)
