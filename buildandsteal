@@ -1,4 +1,4 @@
---// FULL SCRIPT: BLUE SKY GUI + TP HOME + BACK + FLY + AUTO BUY + AUTO LOOP ALL ZONE (A→I)
+--// FULL SCRIPT: BLUE SKY GUI + TP HOME + BACK + FLY + AUTO BUY + TP DOWN 10/15 STUD
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -85,7 +85,8 @@ local loopBtn = Button("PAUSE")
 local flyBtn = Button("FLY OFF")
 local buyBtn = Button("BUY OFF")
 local hackerBtn = Button("HACK OFF")
-local autoZoneBtn = Button("AUTO OFF")
+local tp10Btn = Button("TP-10")
+local tp15Btn = Button("TP-15")
 
 --========================
 -- VARIABLES
@@ -97,7 +98,6 @@ local pauseTp = false
 local flyMode = false
 local autoBuy = false
 local autoHacker = false
-local autoFarm = false
 local running = false
 
 local savedPos = nil
@@ -346,59 +346,26 @@ task.spawn(function()
 end)
 
 --========================
--- AUTO ZONE FARMING
+-- TP DOWN 10 STUD
 --========================
-autoZoneBtn.MouseButton1Click:Connect(function()
-	autoFarm = not autoFarm
-	autoZoneBtn.Text = autoFarm and "AUTO ON" or "AUTO OFF"
+tp10Btn.MouseButton1Click:Connect(function()
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.CFrame = hrp.CFrame + Vector3.new(0, -10, 0)
+	end
 end)
 
 --========================
--- ZONE CHECK
+-- TP DOWN 15 STUD
 --========================
-local function isInZone(pos, pts)
-	local minX,maxX=math.huge,-math.huge
-	local minZ,maxZ=math.huge,-math.huge
-	for _,v in pairs(pts) do
-		minX=math.min(minX,v.X)
-		maxX=math.max(maxX,v.X)
-		minZ=math.min(minZ,v.Z)
-		maxZ=math.max(maxZ,v.Z)
+tp15Btn.MouseButton1Click:Connect(function()
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.CFrame = hrp.CFrame + Vector3.new(0, -15, 0)
 	end
-	return pos.X>=minX and pos.X<=maxX and pos.Z>=minZ and pos.Z<=maxZ
-end
-
---========================
--- SMOOTH TELEPORT
---========================
-local function smoothTP(hrp, target)
-	local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-	
-	while (hrp.Position - target).Magnitude > 2 do
-		if not autoFarm then return end
-		
-		local dir = (target - hrp.Position).Unit
-		local step = math.min(1.6, (hrp.Position - target).Magnitude)
-		local newPos = hrp.Position + Vector3.new(dir.X * step, 0, dir.Z * step)
-		
-		if hum then hum.PlatformStand = true end
-		
-		-- NẰM NGANG KHI TP
-		local lookPos = newPos + Vector3.new(dir.X, 0, dir.Z)
-		hrp.CFrame = CFrame.lookAt(
-			Vector3.new(newPos.X, 1.7, newPos.Z),
-			Vector3.new(lookPos.X, 1.7, lookPos.Z)
-		) * CFrame.Angles(math.rad(90), 0, 0)
-		
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
-		RunService.Heartbeat:Wait()
-	end
-	
-	-- TP XONG: LÊN 3 STUD VÀ ĐỨng THẲNG
-	if hum then hum.PlatformStand = false end
-	hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 3, 0))
-end
+end)
 
 --========================
 -- MAIN LOOP (HEARTBEAT)
@@ -413,7 +380,7 @@ RunService.Heartbeat:Connect(function()
 	--====================
 	-- FLY MODE
 	--====================
-	if flyMode and not tpStep and not backMode and not autoFarm then
+	if flyMode and not tpStep and not backMode then
 
 		local hum = char:FindFirstChildOfClass("Humanoid")
 
@@ -615,36 +582,6 @@ RunService.Heartbeat:Connect(function()
 		hrp.AssemblyAngularVelocity = Vector3.zero
 
 		return
-	end
-
-	--====================
-	-- AUTO ZONE FARMING (LOOP)
-	--====================
-	if running or not autoFarm then return end
-
-	for _,area in pairs(Areas) do
-		if isInZone(hrp.Position, area.Zone) then
-
-			running = true
-
-			task.spawn(function()
-				while autoFarm do
-					for _,p in ipairs(area.Path) do
-						if not autoFarm then break end
-
-						local currentChar = plr.Character
-						local currentHrp = currentChar and currentChar:FindFirstChild("HumanoidRootPart")
-						if not currentHrp then break end
-
-						smoothTP(currentHrp, p)
-						task.wait(0.1)
-					end
-				end
-				running = false
-			end)
-
-			return
-		end
 	end
 
 end)
