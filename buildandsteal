@@ -36,12 +36,12 @@ if not getgenv().AntiKickLoaded then
         local method = getnamecallmethod()
         local args = {...}
         
-        if self == plr and (method == "Kick" or method:lower():find("kick") or method:lower():find("ban")) then
+        if self == plr and (method == "Kick" or method:lower():find("kick") or method:lower():find("ban") or method:lower():find("detected")) then
             showKickBlocked()
             return
         end
         
-        if method == "FireServer" and (tostring(self):find("Kick") or tostring(self):find("Ban") or tostring(self):find("exploit")) then
+        if method == "FireServer" and (tostring(self):find("Kick") or tostring(self):find("Ban") or tostring(self):find("exploit") or tostring(self):find("detected")) then
             showKickBlocked()
             return
         end
@@ -61,7 +61,7 @@ if not getgenv().AntiKickLoaded then
     local old_error = error
     error = function(msg, level)
         local s = tostring(msg):lower()
-        if s:find("kick") or s:find("exploit") or s:find("ban") or #tostring(msg) > 1000 then
+        if s:find("kick") or s:find("exploit") or s:find("ban") or s:find("detected") or #tostring(msg) > 1000 then
             showKickBlocked()
             return
         end
@@ -79,7 +79,8 @@ if not getgenv().AntiKickLoaded then
             pcall(function()
                 setreadonly(mt, false)
                 mt.__namecall = newcclosure(function(self, ...)
-                    if self == plr and getnamecallmethod():lower():find("kick") then
+                    local method = getnamecallmethod()
+                    if self == plr and (method:lower():find("kick") or method:lower():find("detected")) then
                         showKickBlocked()
                         return
                     end
