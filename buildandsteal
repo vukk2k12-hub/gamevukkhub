@@ -176,9 +176,9 @@ local hackerBtn = Button("HACK OFF")
 local tp10Btn = Button("TP-10")
 local tp15Btn = Button("TP-15")
 local tp30Btn = Button("TP-30")
-local tpUp10Btn = Button("UP-10")
-local tpUp15Btn = Button("UP-15")
-local tpUp30Btn = Button("UP-30")
+local tpUp10Btn = Button("TP+10")
+local tpUp15Btn = Button("TP+15")
+local tpUp30Btn = Button("TP+30")
 
 --========================
 -- VARIABLES
@@ -476,8 +476,14 @@ end)
 tpUp10Btn.MouseButton1Click:Connect(function()
 	local char = plr.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	if hrp then
 		hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 10, 0))
+		if hum then
+			hum.PlatformStand = false
+		end
+		flyMode = false
+		flyBtn.Text = "FLY OFF"
 	end
 end)
 
@@ -487,8 +493,14 @@ end)
 tpUp15Btn.MouseButton1Click:Connect(function()
 	local char = plr.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	if hrp then
 		hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 15, 0))
+		if hum then
+			hum.PlatformStand = false
+		end
+		flyMode = false
+		flyBtn.Text = "FLY OFF"
 	end
 end)
 
@@ -498,8 +510,14 @@ end)
 tpUp30Btn.MouseButton1Click:Connect(function()
 	local char = plr.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	if hrp then
 		hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 30, 0))
+		if hum then
+			hum.PlatformStand = false
+		end
+		flyMode = false
+		flyBtn.Text = "FLY OFF"
 	end
 end)
 
