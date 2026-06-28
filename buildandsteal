@@ -1,4 +1,4 @@
---// FULL SCRIPT: BLUE SKY GUI + TP HOME + BACK + FLY + AUTO BUY + TP DOWN 10/15/30 STUD + ANTI-KICK
+--// FULL SCRIPT: BLUE SKY GUI + TP HOME + BACK + FLY + AUTO BUY + TP DOWN 10/15/30 STUD + TP UP + ANTI-KICK
 --// Made By Rixer95-x2 (Anti-Kick) + Original Script
 
 --========================
@@ -129,8 +129,8 @@ Instance.new("UICorner",menuBtn).CornerRadius = UDim.new(1,0)
 --========================
 local frame = Instance.new("Frame")
 frame.Parent = gui
-frame.Size = UDim2.new(0,95,0,245)
-frame.Position = UDim2.new(0.5,-47,0.5,-122)
+frame.Size = UDim2.new(0,95,0,305)
+frame.Position = UDim2.new(0.5,-47,0.5,-152)
 frame.BackgroundColor3 = BG
 frame.Active = true
 frame.Draggable = true
@@ -176,6 +176,9 @@ local hackerBtn = Button("HACK OFF")
 local tp10Btn = Button("TP-10")
 local tp15Btn = Button("TP-15")
 local tp30Btn = Button("TP-30")
+local tpUp10Btn = Button("UP-10")
+local tpUp15Btn = Button("UP-15")
+local tpUp30Btn = Button("UP-30")
 
 --========================
 -- VARIABLES
@@ -464,6 +467,39 @@ tp30Btn.MouseButton1Click:Connect(function()
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if hrp then
 		hrp.CFrame = hrp.CFrame + Vector3.new(0, -30, 0)
+	end
+end)
+
+--========================
+-- TP UP 10 STUD + ĐỨNG THẲNG
+--========================
+tpUp10Btn.MouseButton1Click:Connect(function()
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 10, 0))
+	end
+end)
+
+--========================
+-- TP UP 15 STUD + ĐỨNG THẲNG
+--========================
+tpUp15Btn.MouseButton1Click:Connect(function()
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 15, 0))
+	end
+end)
+
+--========================
+-- TP UP 30 STUD + ĐỨNG THẲNG
+--========================
+tpUp30Btn.MouseButton1Click:Connect(function()
+	local char = plr.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 30, 0))
 	end
 end)
 
