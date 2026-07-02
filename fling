@@ -1,0 +1,146 @@
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local Debris = game:GetService("Debris")
+
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+
+-- ==========================================
+-- TẠO GIAO DIỆN (UI) - BLUE SKY STYLE
+-- ==========================================
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FlingControlPanel"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 220, 0, 180)
+mainFrame.Position = UDim2.new(0.5, -110, 0.4, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 40)
+mainFrame.BackgroundTransparency = 0.3
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Parent = screenGui
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 8)
+frameCorner.Parent = mainFrame
+
+-- Viền sáng cho khung chính
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(0, 190, 255)
+mainStroke.Thickness = 2
+mainStroke.Transparency = 0.2
+mainStroke.Parent = mainFrame
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -35, 0, 35)
+titleLabel.Position = UDim2.new(0, 10, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Fling Control"
+titleLabel.Font = Enum.Font.SourceSansBold
+titleLabel.TextSize = 18
+titleLabel.TextColor3 = Color3.fromRGB(200, 240, 255)
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = mainFrame
+
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 25, 0, 25)
+closeButton.Position = UDim2.new(1, -30, 0, 5)
+closeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+closeButton.Text = "X"
+closeButton.Font = Enum.Font.SourceSansBold
+closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.Parent = mainFrame
+Instance.new("UICorner", closeButton).CornerRadius = UDim.new(0, 6)
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(1, -20, 0, 40)
+toggleButton.Position = UDim2.new(0, 10, 0, 45)
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+toggleButton.Text = "Fling: ON"
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Parent = mainFrame
+Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
+
+local speedInput = Instance.new("TextBox")
+speedInput.Size = UDim2.new(1, -20, 0, 40)
+speedInput.Position = UDim2.new(0, 10, 0, 95)
+speedInput.BackgroundColor3 = Color3.fromRGB(30, 40, 60)
+speedInput.Text = "850"
+speedInput.PlaceholderText = "Nhập tốc độ"
+speedInput.Font = Enum.Font.SourceSans
+speedInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+speedInput.Parent = mainFrame
+Instance.new("UICorner", speedInput).CornerRadius = UDim.new(0, 6)
+
+-- ==========================================
+-- XỬ LÝ LOGIC HOẠT ĐỘNG
+-- ==========================================
+
+local isFlingEnabled = true
+local flingSpeed = 850
+
+toggleButton.MouseButton1Click:Connect(function()
+	isFlingEnabled = not isFlingEnabled
+	toggleButton.Text = isFlingEnabled and "Fling: ON" or "Fling: OFF"
+	toggleButton.BackgroundColor3 = isFlingEnabled and Color3.fromRGB(0, 120, 255) or Color3.fromRGB(120, 120, 120)
+end)
+
+-- Bỏ giới hạn, nhập thoải mái
+speedInput:GetPropertyChangedSignal("Text"):Connect(function()
+	local numericText = speedInput.Text:gsub("%D", "")
+	if numericText ~= "" then
+		flingSpeed = tonumber(numericText)
+		speedInput.Text = numericText
+	else
+		flingSpeed = 0
+	end
+end)
+
+closeButton.MouseButton1Click:Connect(function() screenGui:Destroy() end)
+
+-- Kéo thả Menu
+local isDragging, dragStartPos, frameStartPos
+mainFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		isDragging = true
+		dragStartPos = input.Position
+		frameStartPos = mainFrame.Position
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = input.Position - dragStartPos
+		mainFrame.Position = UDim2.new(frameStartPos.X.Scale, frameStartPos.X.Offset + delta.X, frameStartPos.Y.Scale, frameStartPos.Y.Offset + delta.Y)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false end
+end)
+
+-- Logic Fling
+Workspace.ChildAdded:Connect(function(child)
+	if child.Name == "GrabParts" then
+		local grabPart = child:FindFirstChild("GrabPart")
+		if not grabPart then return end
+		local weldConstraint = grabPart:FindFirstChild("WeldConstraint")
+		if weldConstraint and weldConstraint.Part1 then
+			local targetPart = weldConstraint.Part1
+			local bodyVelocity = Instance.new("BodyVelocity")
+			bodyVelocity.Parent = targetPart
+			child:GetPropertyChangedSignal("Parent"):Connect(function()
+				if not child.Parent and isFlingEnabled then
+					bodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+					bodyVelocity.Velocity = Workspace.CurrentCamera.CFrame.LookVector * flingSpeed
+					Debris:AddItem(bodyVelocity, 0.5)
+				end
+			end)
+		end
+	end
+end)
