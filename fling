@@ -138,7 +138,7 @@ Workspace.ChildAdded:Connect(function(child)
 				if not child.Parent and isFlingEnabled then
 					bodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
 					bodyVelocity.Velocity = Workspace.CurrentCamera.CFrame.LookVector * flingSpeed
-					Debris:AddItem(bodyVelocity, 0.5)
+					Debris:AddItem(bodyVelocity, 2)
 				end
 			end)
 		end
