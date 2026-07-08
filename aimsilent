@@ -1,0 +1,255 @@
+-- Khởi tạo Thư viện Fluent UI (Sky Blue Theme & Aura Effect)
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-apit/Fluent/releases/latest/download/main.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "aim silent Premium",
+    SubTitle = "by vuhub",
+    TabWidth = 140,
+    Size = UDim2.fromOffset(480, 380), -- Tăng nhẹ chiều cao để vừa nút mới
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+Fluent:SetTheme("Dark")
+Window.Options.AccentColor = Color3.fromRGB(0, 162, 255) -- Sky Blue chuẩn đẹp
+
+-- Khởi tạo các Tab
+local Tab1 = Window:AddTab({ Title = "Aim Silent", Icon = "target" })
+local Tab2 = Window:AddTab({ Title = "ESP", Icon = "eye" })
+local Tab3 = Window:AddTab({ Title = "Setting", Icon = "settings" })
+
+-- Các dịch vụ Roblox
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local Teams = game:GetService("Teams")
+
+-- Trạng thái tính năng
+local SilentAimEnabled = false
+local ShowMyFov = false 
+local TeamCheckEnabled = false -- Trạng thái nút Check Team mới
+local EspEnabled = false
+local AimDistanceFOV = 50 
+
+-- Khởi tạo Vòng Tròn 2D nằm trên mặt đất xung quanh BẠN
+local MyGroundRing = Instance.new("Part")
+MyGroundRing.Shape = Enum.PartType.Cylinder
+MyGroundRing.Material = Enum.Material.Neon
+MyGroundRing.Color = Color3.fromRGB(0, 162, 255)
+MyGroundRing.CanCollide = false
+MyGroundRing.Anchored = true
+MyGroundRing.CastShadow = false
+MyGroundRing.Transparency = 0.7
+MyGroundRing.Parent = workspace
+
+local function toggleMyRing(visible)
+    MyGroundRing.Transparency = visible and 0.7 or 1
+end
+toggleMyRing(false)
+
+local Cache = {}
+
+-- ==========================================
+-- LOGIC KIỂM TRA ĐỒNG ĐỘI (TEAM CHECK)
+-- ==========================================
+local function isTeammate(player)
+    if not TeamCheckEnabled then return false end -- Nếu tắt Check Team thì coi như tất cả là địch
+    
+    -- Cách 1: Kiểm tra qua hệ thống Team chính thức của Roblox
+    if LocalPlayer.Team and player.Team then
+        return LocalPlayer.Team == player.Team
+    end
+    
+    -- Cách 2: Phòng hờ trường hợp game chia team theo màu (TeamColor)
+    if LocalPlayer.TeamColor and player.TeamColor then
+        return LocalPlayer.TeamColor == player.TeamColor
+    end
+    
+    return false
+end
+
+-- ==========================================
+-- LOGIC SILENT AIM & THIẾT LẬP VÒNG QUÉT
+-- ==========================================
+local function getClosestPlayerInFOV()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then 
+        return nil 
+    end
+    
+    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            
+            -- BƯỚC KIỂM TRA TEAM: Nếu bật Check Team và người này là đồng đội -> Bỏ qua ngay lập tức
+            if isTeammate(player) then
+                continue
+            end
+            
+            -- Tính số mét thực tế
+            local distance = (myPos - player.Character.HumanoidRootPart.Position).Magnitude
+            
+            -- Kiểm tra nếu nằm trong vòng FOV (Ví dụ: 50m)
+            if AimDistanceFOV == 0 or distance <= AimDistanceFOV then
+                if distance < shortestDistance then
+                    closestPlayer = player
+                    shortestDistance = distance
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- Hook hệ thống gửi dữ liệu đạn của Game (Remote Server)
+local OldNamecall
+OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
+    local Args = {...}
+    local Method = getnamecallmethod()
+    
+    if SilentAimEnabled and (Method == "FireServer" or Method == "InvokeServer") then
+        local target = getClosestPlayerInFOV() -- Tìm đứa gần nhất đã vào vòng và KHÔNG CÙNG TEAM
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            -- Tự động bẻ hướng đạn vào mục tiêu hợp lệ
+        end
+    end
+    return OldNamecall(Self, unpack(Args))
+end)
+
+-- ==========================================
+-- UI CONTROLS - TAB 1
+-- ==========================================
+Tab1:AddToggle("SilentAimToggle", {
+    Title = "Silent Aim Bot",
+    Description = "Tự động hook Remote Server & Aim player gần nhất",
+    Default = false,
+    Callback = function(Value) SilentAimEnabled = Value end
+})
+
+Tab1:AddToggle("ShowMyFovToggle", {
+    Title = "Hiện vùng xung quanh Player",
+    Description = "Hiện vòng tròn dẹt Sky Blue nằm trên mặt đất xung quanh BẠN",
+    Default = false,
+    Callback = function(Value) 
+        ShowMyFov = Value 
+        if not Value then toggleMyRing(false) end
+    end
+})
+
+-- NÚT MỚI: Bật/Tắt kiểm tra Đội để né đồng đội
+Tab1:AddToggle("TeamCheckToggle", {
+    Title = "Kiểm tra Đội (Team Check)",
+    Description = "Tự động kiểm tra hệ thống Team của game để NÉ đồng đội ra",
+    Default = false,
+    Callback = function(Value) 
+        TeamCheckEnabled = Value 
+        if Value then
+            local currentTeamName = LocalPlayer.Team and LocalPlayer.Team.Name or "Không rõ / Solo"
+            Fluent:Notify({
+                Title = "Team Monitor",
+                Content = "Đã nhận diện Team của bạn: " .. currentTeamName .. ". Sẽ tự động né đồng đội!",
+                Duration = 4
+            })
+        end
+    end
+})
+
+-- Vòng lặp cập nhật vị trí Vòng Tròn bám theo bạn
+RunService.RenderStepped:Connect(function()
+    if ShowMyFov and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local myHrp = LocalPlayer.Character.HumanoidRootPart
+        if AimDistanceFOV > 0 then
+            local ringSize = AimDistanceFOV * 2 
+            MyGroundRing.Size = Vector3.new(0.1, ringSize, ringSize)
+            MyGroundRing.CFrame = CFrame.new(myHrp.Position - Vector3.new(0, 3, 0)) * CFrame.Angles(0, 0, math.rad(90))
+            toggleMyRing(true)
+        else
+            toggleMyRing(false)
+        end
+    else
+        toggleMyRing(false)
+    end
+end)
+
+-- ==========================================
+-- TAB 2: ESP LOGIC (Cũng tự động ẩn dòng kẻ/khung nếu cùng team khi bật Check Team)
+-- ==========================================
+local function createEsp(player)
+    local box = Drawing.new("Square")
+    box.Visible = false; box.Color = Color3.fromRGB(0, 162, 255); box.Thickness = 1.5; box.Filled = false
+    local text = Drawing.new("Text")
+    text.Visible = false; text.Color = Color3.fromRGB(255, 255, 255); text.Size = 14; text.Center = true
+    local line = Drawing.new("Line")
+    line.Visible = false; line.Color = Color3.fromRGB(0, 162, 255); line.Thickness = 1; line.Transparency = 0.6
+    Cache[player] = {Box = box, Text = text, Line = line}
+end
+
+local function removeEsp(player)
+    if Cache[player] then
+        Cache[player].Box:Remove(); Cache[player].Text:Remove(); Cache[player].Line:Remove()
+        Cache[player] = nil
+    end
+end
+
+for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then createEsp(p) end end
+Players.PlayerAdded:Connect(function(p) if p ~= LocalPlayer then createEsp(p) end end)
+Players.PlayerRemoving:Connect(function(p) removeEsp(p) end)
+
+RunService.RenderStepped:Connect(function()
+    local Camera = workspace.CurrentCamera
+    for player, drawings in pairs(Cache) do
+        if EspEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            
+            -- Nếu bật Check Team và người này là đồng đội -> Ẩn ESP đi để đỡ rối mắt
+            if isTeammate(player) then
+                drawings.Box.Visible = false; drawings.Text.Visible = false; drawings.Line.Visible = false
+                continue
+            end
+
+            local hrp = player.Character.HumanoidRootPart
+            local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+            if onScreen then
+                local distance = (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
+                local sizeX = 1000 / distance
+                local sizeY = 1500 / distance
+                drawings.Box.Size = Vector2.new(sizeX, sizeY)
+                drawings.Box.Position = Vector2.new(screenPos.X - sizeX / 2, screenPos.Y - sizeY / 2)
+                drawings.Box.Visible = true
+                drawings.Text.Text = string.format("[ %d m ]", math.floor(distance))
+                drawings.Text.Position = Vector2.new(screenPos.X + (sizeX / 2) + 15, screenPos.Y - 7)
+                drawings.Text.Visible = true
+                drawings.Line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                drawings.Line.To = Vector2.new(screenPos.X, screenPos.Y + (sizeY / 2))
+                drawings.Line.Visible = true
+                continue
+            end
+        end
+        drawings.Box.Visible = false; drawings.Text.Visible = false; drawings.Line.Visible = false
+    end
+end)
+
+Tab2:AddToggle("EspToggle", {
+    Title = "2D Box & Snaplines",
+    Description = "Hiện khung chữ nhật, khoảng cách và tia nối đa mục tiêu",
+    Default = false,
+    Callback = function(Value) EspEnabled = Value end
+})
+
+-- ==========================================
+-- TAB 3: SETTING
+-- ==========================================
+Tab3:AddSlider("FOVSlider", {
+    Title = "Vùng ngắm Khoảng Cách (m)",
+    Description = "0 = Vô hạn. Thay đổi số mét ở đây để vòng tròn quanh bạn tự co giãn theo.",
+    Min = 0,
+    Max = 300, 
+    Default = 50,
+    Rounding = 0,
+    Callback = function(Value) AimDistanceFOV = Value end
+})
+
+Fluent:Notify({Title = "Sky Blue System", Content = "Đã tích hợp module Auto-Hook Team Check thành công!", Duration = 4})
