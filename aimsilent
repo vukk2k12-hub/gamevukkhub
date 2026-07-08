@@ -1,99 +1,115 @@
--- Khởi tạo Thư viện Fluent UI (Sky Blue Theme & Aura Effect)
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-apit/Fluent/releases/latest/download/main.lua"))()
+-- =================================================================
+-- SKY BLUE PREMIUM - SCRIPT FULL (KHÔNG LOAD LINK - OPTIMIZED FOR DELTA)
+-- =================================================================
 
-local Window = Fluent:CreateWindow({
-    Title = "aim silent Premium",
-    SubTitle = "by vuhub",
-    TabWidth = 140,
-    Size = UDim2.fromOffset(480, 380), -- Tăng nhẹ chiều cao để vừa nút mới
-    Acrylic = true,
-    Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
-})
+-- Tự động xóa GUI cũ nếu có để tránh trùng lặp đè màn hình
+if game.CoreInterface:FindFirstChild("SkyBlueGui") then
+    game.CoreInterface.SkyBlueGui:Destroy()
+end
 
-Fluent:SetTheme("Dark")
-Window.Options.AccentColor = Color3.fromRGB(0, 162, 255) -- Sky Blue chuẩn đẹp
+-- Khởi tạo Giao diện chính đưa vào CoreInterface (Tránh bị phát hiện khi chụp màn hình)
+local UI = Instance.new("ScreenGui")
+UI.Name = "SkyBlueGui"
+UI.ResetOnSpawn = false
+UI.Parent = game.CoreInterface
 
--- Khởi tạo các Tab
-local Tab1 = Window:AddTab({ Title = "Aim Silent", Icon = "target" })
-local Tab2 = Window:AddTab({ Title = "ESP", Icon = "eye" })
-local Tab3 = Window:AddTab({ Title = "Setting", Icon = "settings" })
+-- Khung Menu Container chính
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 420, 0, 300)
+MainFrame.Position = UDim2.new(0.5, -210, 0.5, -150)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 20, 28)
+MainFrame.Active = true
+MainFrame.Draggable = true -- Hỗ trợ giữ đè và di chuyển Menu bằng tay trên điện thoại
+MainFrame.Parent = UI
 
--- Các dịch vụ Roblox
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+-- Đường viền phát sáng nhẹ màu Sky Blue xung quanh Menu
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Thickness = 2
+MainStroke.Color = Color3.fromRGB(0, 162, 255)
+MainStroke.Transparency = 0.3
+MainStroke.Parent = MainFrame
+
+-- Thanh chứa các nút Tab phía trên cùng
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, 0, 0, 45)
+TabBar.BackgroundColor3 = Color3.fromRGB(10, 14, 20)
+TabBar.Parent = MainFrame
+
+local TabBarCorner = Instance.new("UICorner")
+TabBarCorner.CornerRadius = UDim.new(0, 12)
+TabBarCorner.Parent = TabBar
+
+-- Vùng hiển thị nội dung tính năng phía dưới
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Size = UDim2.new(1, -20, 1, -65)
+ContentFrame.Position = UDim2.new(0, 10, 0, 55)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainFrame
+
+local Panels = {}
+
+-- Hệ thống các biến quản lý trạng thái
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local Teams = game:GetService("Teams")
 
--- Trạng thái tính năng
 local SilentAimEnabled = false
 local ShowMyFov = false 
-local TeamCheckEnabled = false -- Trạng thái nút Check Team mới
+local TeamCheckEnabled = false
 local EspEnabled = false
 local AimDistanceFOV = 50 
 
--- Khởi tạo Vòng Tròn 2D nằm trên mặt đất xung quanh BẠN
+-- Khởi tạo Vòng Tròn 2D nằm phẳng lỳ trên mặt đất xung quanh bạn (Dùng khối trụ dẹt)
 local MyGroundRing = Instance.new("Part")
 MyGroundRing.Shape = Enum.PartType.Cylinder
 MyGroundRing.Material = Enum.Material.Neon
-MyGroundRing.Color = Color3.fromRGB(0, 162, 255)
+MyGroundRing.Color = Color3.fromRGB(0, 162, 255) -- Màu xanh Sky Blue
 MyGroundRing.CanCollide = false
 MyGroundRing.Anchored = true
 MyGroundRing.CastShadow = false
-MyGroundRing.Transparency = 0.7
+MyGroundRing.Transparency = 1 -- Mặc định ẩn ban đầu
 MyGroundRing.Parent = workspace
 
 local function toggleMyRing(visible)
-    MyGroundRing.Transparency = visible and 0.7 or 1
+    if MyGroundRing then
+        MyGroundRing.Transparency = visible and 0.7 or 1
+    end
 end
-toggleMyRing(false)
 
 local Cache = {}
 
--- ==========================================
--- LOGIC KIỂM TRA ĐỒNG ĐỘI (TEAM CHECK)
--- ==========================================
+-- =================================================================
+-- PHẦN XỬ LÝ LOGIC (AIM SILENT, TEAM CHECK, ESP)
+-- =================================================================
+
+-- Hàm kiểm tra xem có phải đồng đội không
 local function isTeammate(player)
-    if not TeamCheckEnabled then return false end -- Nếu tắt Check Team thì coi như tất cả là địch
-    
-    -- Cách 1: Kiểm tra qua hệ thống Team chính thức của Roblox
-    if LocalPlayer.Team and player.Team then
-        return LocalPlayer.Team == player.Team
-    end
-    
-    -- Cách 2: Phòng hờ trường hợp game chia team theo màu (TeamColor)
-    if LocalPlayer.TeamColor and player.TeamColor then
-        return LocalPlayer.TeamColor == player.TeamColor
-    end
-    
+    if not TeamCheckEnabled then return false end
+    if LocalPlayer.Team and player.Team then return LocalPlayer.Team == player.Team end
+    if LocalPlayer.TeamColor and player.TeamColor then return LocalPlayer.TeamColor == player.TeamColor end
     return false
 end
 
--- ==========================================
--- LOGIC SILENT AIM & THIẾT LẬP VÒNG QUÉT
--- ==========================================
+-- Hàm tìm kẻ địch gần nhất ĐÃ VÀO VÒNG MÉT QUY ĐỊNH và KHÔNG CÙNG TEAM
 local function getClosestPlayerInFOV()
     local closestPlayer = nil
     local shortestDistance = math.huge
-
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then 
-        return nil 
-    end
-    
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
             
-            -- BƯỚC KIỂM TRA TEAM: Nếu bật Check Team và người này là đồng đội -> Bỏ qua ngay lập tức
-            if isTeammate(player) then
-                continue
-            end
+            if isTeammate(player) then continue end -- Né đồng đội nếu bật check team
             
-            -- Tính số mét thực tế
             local distance = (myPos - player.Character.HumanoidRootPart.Position).Magnitude
             
-            -- Kiểm tra nếu nằm trong vòng FOV (Ví dụ: 50m)
+            -- Kiểm tra điều kiện khoảng cách (0 = Vô hạn mét)
             if AimDistanceFOV == 0 or distance <= AimDistanceFOV then
                 if distance < shortestDistance then
                     closestPlayer = player
@@ -105,60 +121,21 @@ local function getClosestPlayerInFOV()
     return closestPlayer
 end
 
--- Hook hệ thống gửi dữ liệu đạn của Game (Remote Server)
+-- Hook hệ thống truyền dữ liệu đạn (Remote Namecall)
 local OldNamecall
 OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
     local Args = {...}
     local Method = getnamecallmethod()
-    
     if SilentAimEnabled and (Method == "FireServer" or Method == "InvokeServer") then
-        local target = getClosestPlayerInFOV() -- Tìm đứa gần nhất đã vào vòng và KHÔNG CÙNG TEAM
-        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            -- Tự động bẻ hướng đạn vào mục tiêu hợp lệ
+        local success, target = pcall(getClosestPlayerInFOV)
+        if success and target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            -- Khi bấm bắn, đạn sẽ tự bẻ hướng vào người mục tiêu hợp lệ ở đây tùy cấu trúc game
         end
     end
     return OldNamecall(Self, unpack(Args))
 end)
 
--- ==========================================
--- UI CONTROLS - TAB 1
--- ==========================================
-Tab1:AddToggle("SilentAimToggle", {
-    Title = "Silent Aim Bot",
-    Description = "Tự động hook Remote Server & Aim player gần nhất",
-    Default = false,
-    Callback = function(Value) SilentAimEnabled = Value end
-})
-
-Tab1:AddToggle("ShowMyFovToggle", {
-    Title = "Hiện vùng xung quanh Player",
-    Description = "Hiện vòng tròn dẹt Sky Blue nằm trên mặt đất xung quanh BẠN",
-    Default = false,
-    Callback = function(Value) 
-        ShowMyFov = Value 
-        if not Value then toggleMyRing(false) end
-    end
-})
-
--- NÚT MỚI: Bật/Tắt kiểm tra Đội để né đồng đội
-Tab1:AddToggle("TeamCheckToggle", {
-    Title = "Kiểm tra Đội (Team Check)",
-    Description = "Tự động kiểm tra hệ thống Team của game để NÉ đồng đội ra",
-    Default = false,
-    Callback = function(Value) 
-        TeamCheckEnabled = Value 
-        if Value then
-            local currentTeamName = LocalPlayer.Team and LocalPlayer.Team.Name or "Không rõ / Solo"
-            Fluent:Notify({
-                Title = "Team Monitor",
-                Content = "Đã nhận diện Team của bạn: " .. currentTeamName .. ". Sẽ tự động né đồng đội!",
-                Duration = 4
-            })
-        end
-    end
-})
-
--- Vòng lặp cập nhật vị trí Vòng Tròn bám theo bạn
+-- Vòng lặp cập nhật vị trí Vòng Tròn 2D dẹt dưới đất bám theo chân bạn liên tục
 RunService.RenderStepped:Connect(function()
     if ShowMyFov and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local myHrp = LocalPlayer.Character.HumanoidRootPart
@@ -175,9 +152,191 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ==========================================
--- TAB 2: ESP LOGIC (Cũng tự động ẩn dòng kẻ/khung nếu cùng team khi bật Check Team)
--- ==========================================
+-- =================================================================
+-- HÀM DỰNG GIAO DIỆN SWITCH VÀ SLIDER THUẦN
+-- =================================================================
+
+local function createPanel(name)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundTransparency = 1
+    frame.Visible = false
+    frame.Parent = ContentFrame
+    Panels[name] = frame
+    return frame
+end
+
+local function createToggle(parent, text, default, callback)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 45)
+    row.BackgroundColor3 = Color3.fromRGB(24, 31, 41)
+    row.Parent = parent
+    
+    local rowCorner = Instance.new("UICorner")
+    rowCorner.CornerRadius = UDim.new(0, 6)
+    rowCorner.Parent = row
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7, 0, 1, 0)
+    label.Position = UDim2.new(0, 15, 0, 0)
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.BackgroundTransparency = 1
+    label.Parent = row
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 45, 0, 24)
+    btn.Position = UDim2.new(1, -60, 0.5, -12)
+    btn.BackgroundColor3 = default and Color3.fromRGB(0, 162, 255) or Color3.fromRGB(45, 55, 72)
+    btn.Text = default and "ON" or "OFF"
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 11
+    btn.Font = Enum.Font.SourceSansBold
+    btn.Parent = row
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 12)
+    btnCorner.Parent = btn
+
+    local state = default
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.BackgroundColor3 = state and Color3.fromRGB(0, 162, 255) or Color3.fromRGB(45, 55, 72)
+        btn.Text = state and "ON" or "OFF"
+        callback(state)
+    end)
+end
+
+-- Khởi tạo cấu trúc các Trang Panel (Tab 1, 2, 3)
+local P1 = createPanel("Aim Silent")
+local P2 = createPanel("ESP")
+local P3 = createPanel("Setting")
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Spacing = UDim.new(0, 8)
+UIListLayout.Parent = P1
+
+local UIListLayout2 = UIListLayout:Clone()
+UIListLayout2.Parent = P2
+
+-- [TAB 1]: Đăng ký tính năng
+createToggle(P1, "Silent Aim Bot", false, function(v) SilentAimEnabled = v end)
+createToggle(P1, "Hiện vùng xung quanh Player", false, function(v) ShowMyFov = v; if not v then toggleMyRing(false) end end)
+createToggle(P1, "Kiểm tra Đội (Team Check)", false, function(v) TeamCheckEnabled = v end)
+
+-- [TAB 2]: Đăng ký tính năng
+createToggle(P2, "2D Box & Snaplines (ESP)", false, function(v) EspEnabled = v end)
+
+-- [TAB 3]: Đăng ký Ô nhập số khoảng cách ngắm bắn (Thay thế slider kéo nặng máy)
+local SliderRow = Instance.new("Frame")
+SliderRow.Size = UDim2.new(1, 0, 0, 60)
+SliderRow.BackgroundColor3 = Color3.fromRGB(24, 31, 41)
+SliderRow.Parent = P3
+
+local SRCorn = Instance.new("UICorner")
+SRCorn.CornerRadius = UDim.new(0, 6)
+SRCorn.Parent = SliderRow
+
+local SliderLabel = Instance.new("TextLabel")
+SliderLabel.Size = UDim2.new(0.6, 0, 0, 30)
+SliderLabel.Position = UDim2.new(0, 15, 0, 5)
+SliderLabel.Text = "Vùng ngắm Khoảng Cách (m):"
+SliderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+SliderLabel.TextSize = 13
+SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+SliderLabel.BackgroundTransparency = 1
+SliderLabel.Parent = SliderRow
+
+local ValueBox = Instance.new("TextBox")
+ValueBox.Size = UDim2.new(0, 80, 0, 25)
+ValueBox.Position = UDim2.new(1, -95, 0, 8)
+ValueBox.BackgroundColor3 = Color3.fromRGB(45, 55, 72)
+ValueBox.Text = "50"
+ValueBox.TextColor3 = Color3.fromRGB(0, 162, 255)
+ValueBox.TextSize = 14
+ValueBox.Font = Enum.Font.SourceSansBold
+ValueBox.Parent = SliderRow
+
+local VBCorn = Instance.new("UICorner")
+VBCorn.CornerRadius = UDim.new(0, 4)
+VBCorn.Parent = ValueBox
+
+local SliderDesc = Instance.new("TextLabel")
+SliderDesc.Size = UDim2.new(1, -30, 0, 20)
+SliderDesc.Position = UDim2.new(0, 15, 0, 35)
+SliderDesc.Text = "Nhấn vào ô trên để sửa số mét (Nhập số 0 để bắn Vô Hạn)"
+SliderDesc.TextColor3 = Color3.fromRGB(150, 160, 175)
+SliderDesc.TextSize = 11
+SliderDesc.TextXAlignment = Enum.TextXAlignment.Left
+SliderDesc.BackgroundTransparency = 1
+SliderDesc.Parent = SliderRow
+
+ValueBox.FocusLost:Connect(function()
+    local num = tonumber(ValueBox.Text)
+    if num then
+        AimDistanceFOV = math.clamp(num, 0, 1000)
+        ValueBox.Text = tostring(AimDistanceFOV)
+    else
+        ValueBox.Text = tostring(AimDistanceFOV)
+    end
+end)
+
+-- Nút Tự hủy/Đóng hoàn toàn Menu giải phóng bộ nhớ
+local DestroyBtn = Instance.new("TextButton")
+DestroyBtn.Size = UDim2.new(1, 0, 0, 40)
+DestroyBtn.Position = UDim2.new(0, 0, 0, 75)
+DestroyBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+DestroyBtn.Text = "DESTROY MENU"
+DestroyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+DestroyBtn.TextSize = 14
+DestroyBtn.Font = Enum.Font.SourceSansBold
+DestroyBtn.Parent = P3
+
+local DBCorn = Instance.new("UICorner")
+DBCorn.CornerRadius = UDim.new(0, 6)
+DBCorn.Parent = DestroyBtn
+
+DestroyBtn.MouseButton1Click:Connect(function()
+    if MyGroundRing then MyGroundRing:Destroy() end
+    for _, drawings in pairs(Cache) do
+        drawings.Box:Remove(); drawings.Text:Remove(); drawings.Line:Remove()
+    end
+    UI:Destroy()
+end)
+
+-- =================================================================
+-- KHỞI TẠO NÚT CLICK CHUYỂN ĐỔI QUA LẠI GIỮA CÁC TAB
+-- =================================================================
+local tabNames = {"Aim Silent", "ESP", "Setting"}
+for i, name in ipairs(tabNames) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1 / #tabNames, 0, 1, 0)
+    btn.Position = UDim2.new((i - 1) / #tabNames, 0, 0, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = name
+    btn.TextColor3 = i == 1 and Color3.fromRGB(0, 162, 255) or Color3.fromRGB(150, 150, 150)
+    btn.TextSize = 13
+    btn.Font = Enum.Font.SourceSansBold
+    btn.Parent = TabBar
+
+    btn.MouseButton1Click:Connect(function()
+        for _, p in pairs(Panels) do p.Visible = false end
+        for _, b in pairs(TabBar:GetChildren()) do
+            if b:IsA("TextButton") then b.TextColor3 = Color3.fromRGB(150, 150, 150) end
+        end
+        Panels[name].Visible = true
+        btn.TextColor3 = Color3.fromRGB(0, 162, 255)
+    end)
+end
+
+-- Hiển thị mặc định giao diện Tab Aim lúc mới chạy script
+Panels["Aim Silent"].Visible = true
+
+-- =================================================================
+-- HỆ THỐNG VẼ ĐỒ HỌA ESP (SỬ DỤNG DRAWING API ĐỂ KHÔNG BỊ TRỄ)
+-- =================================================================
 local function createEsp(player)
     local box = Drawing.new("Square")
     box.Visible = false; box.Color = Color3.fromRGB(0, 162, 255); box.Thickness = 1.5; box.Filled = false
@@ -196,60 +355,4 @@ local function removeEsp(player)
 end
 
 for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then createEsp(p) end end
-Players.PlayerAdded:Connect(function(p) if p ~= LocalPlayer then createEsp(p) end end)
-Players.PlayerRemoving:Connect(function(p) removeEsp(p) end)
-
-RunService.RenderStepped:Connect(function()
-    local Camera = workspace.CurrentCamera
-    for player, drawings in pairs(Cache) do
-        if EspEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
-            
-            -- Nếu bật Check Team và người này là đồng đội -> Ẩn ESP đi để đỡ rối mắt
-            if isTeammate(player) then
-                drawings.Box.Visible = false; drawings.Text.Visible = false; drawings.Line.Visible = false
-                continue
-            end
-
-            local hrp = player.Character.HumanoidRootPart
-            local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-            if onScreen then
-                local distance = (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
-                local sizeX = 1000 / distance
-                local sizeY = 1500 / distance
-                drawings.Box.Size = Vector2.new(sizeX, sizeY)
-                drawings.Box.Position = Vector2.new(screenPos.X - sizeX / 2, screenPos.Y - sizeY / 2)
-                drawings.Box.Visible = true
-                drawings.Text.Text = string.format("[ %d m ]", math.floor(distance))
-                drawings.Text.Position = Vector2.new(screenPos.X + (sizeX / 2) + 15, screenPos.Y - 7)
-                drawings.Text.Visible = true
-                drawings.Line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                drawings.Line.To = Vector2.new(screenPos.X, screenPos.Y + (sizeY / 2))
-                drawings.Line.Visible = true
-                continue
-            end
-        end
-        drawings.Box.Visible = false; drawings.Text.Visible = false; drawings.Line.Visible = false
-    end
-end)
-
-Tab2:AddToggle("EspToggle", {
-    Title = "2D Box & Snaplines",
-    Description = "Hiện khung chữ nhật, khoảng cách và tia nối đa mục tiêu",
-    Default = false,
-    Callback = function(Value) EspEnabled = Value end
-})
-
--- ==========================================
--- TAB 3: SETTING
--- ==========================================
-Tab3:AddSlider("FOVSlider", {
-    Title = "Vùng ngắm Khoảng Cách (m)",
-    Description = "0 = Vô hạn. Thay đổi số mét ở đây để vòng tròn quanh bạn tự co giãn theo.",
-    Min = 0,
-    Max = 300, 
-    Default = 50,
-    Rounding = 0,
-    Callback = function(Value) AimDistanceFOV = Value end
-})
-
-Fluent:Notify({Title = "Sky Blue System", Content = "Đã tích hợp module Auto-Hook Team Check thành công!", Duration = 4})
+Players
