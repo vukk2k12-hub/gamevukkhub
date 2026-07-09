@@ -1,358 +1,2245 @@
--- =================================================================
--- SKY BLUE PREMIUM - SCRIPT FULL (KHÔNG LOAD LINK - OPTIMIZED FOR DELTA)
--- =================================================================
+-- [[ CONFIGURATION & GLOBALS ]]
+getgenv().Config = {
+    SilentAim = false,
+    CheckTeam = false,
+    ShowRange = false,
+    RangeValue = 100,
+    ESP = false
+}
 
--- Tự động xóa GUI cũ nếu có để tránh trùng lặp đè màn hình
-if game.CoreInterface:FindFirstChild("SkyBlueGui") then
-    game.CoreInterface.SkyBlueGui:Destroy()
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- [[ SCREEN GUI ]]
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SkyGui_Mobile_Rounded"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- [[ UTILS: DRAG LOGIC FOR MOBILE/PC ]]
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            dragInput = input
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
 end
 
--- Khởi tạo Giao diện chính đưa vào CoreInterface (Tránh bị phát hiện khi chụp màn hình)
-local UI = Instance.new("ScreenGui")
-UI.Name = "SkyBlueGui"
-UI.ResetOnSpawn = false
-UI.Parent = game.CoreInterface
+-- [[ UTILS: ROUNDED CORNERS & BLUE SKY PULSE EFFECT ]]
+local function applyGlowPulseAndRound(instance, cornerRadius)
+    -- Thêm bo góc cho thực thể
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, cornerRadius or 8)
+    uiCorner.Parent = instance
 
--- Khung Menu Container chính
+    -- Tạo viền sáng (Stroke)
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = Color3.fromRGB(135, 206, 250) -- Blue Sky
+    uiStroke.Thickness = 2.5
+    uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    uiStroke.Parent = instance
+
+    -- Tạo luồng hiệu ứng nhịp đập
+    task.spawn(function()
+        while instance and instance.Parent do
+            if not instance or not instance.Parent then break end
+            uiStroke.Thickness = 1.5 + (math.sin(tick() * 5) * 1.5)
+            task.wait(0.02)
+        end
+    end)
+end
+
+-- [[ MAIN UI ELEMENTS ]]
+-- 1. Nút Bật/Tắt Menu (Bo góc tròn 12px)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 60, 0, 60)
+ToggleBtn.Position = UDim2.new(0.1, 0, 0.2, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
+ToggleBtn.Text = "MENU"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 14
+ToggleBtn.Parent = ScreenGui
+makeDraggable(ToggleBtn)
+applyGlowPulseAndRound(ToggleBtn, 12)
+
+-- 2. Khung Menu Chính (Bo góc 10px)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 420, 0, 300)
-MainFrame.Position = UDim2.new(0.5, -210, 0.5, -150)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 20, 28)
-MainFrame.Active = true
-MainFrame.Draggable = true -- Hỗ trợ giữ đè và di chuyển Menu bằng tay trên điện thoại
-MainFrame.Parent = UI
+MainFrame.Size = UDim2.new(0, 350, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -125)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+makeDraggable(MainFrame)
+applyGlowPulseAndRound(MainFrame, 10)
 
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 12)
-MainCorner.Parent = MainFrame
+-- Sự kiện ẩn hiển menu khi click nút
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
 
--- Đường viền phát sáng nhẹ màu Sky Blue xung quanh Menu
-local MainStroke = Instance.new("UIStroke")
-MainStroke.Thickness = 2
-MainStroke.Color = Color3.fromRGB(0, 162, 255)
-MainStroke.Transparency = 0.3
-MainStroke.Parent = MainFrame
+-- [[ TAB SYSTEM INTERFACE ]]
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, 0, 0, 40)
+TabBar.BackgroundTransparency = 1 -- Để lộ nền bo góc của khung chính
 
--- Thanh chứa các nút Tab phía trên cùng
-local TabBar = Instance.new("Frame")
-TabBar.Size = UDim2.new(1, 0, 0, 45)
-TabBar.BackgroundColor3 = Color3.fromRGB(10, 14, 20)
-TabBar.Parent = MainFrame
+local Container = Instance.new("Frame", MainFrame)
+Container.Size = UDim2.new(1, 0, 1, -40)
+Container.Position = UDim2.new(0, 0, 0, 40)
+Container.BackgroundTransparency = 1
 
-local TabBarCorner = Instance.new("UICorner")
-TabBarCorner.CornerRadius = UDim.new(0, 12)
-TabBarCorner.Parent = TabBar
+local Tabs = {
+    Main = Instance.new("Frame", Container),
+    ESP = Instance.new("Frame", Container),
+    Setting = Instance.new("Frame", Container)
+}
 
--- Vùng hiển thị nội dung tính năng phía dưới
-local ContentFrame = Instance.new("Frame")
-ContentFrame.Size = UDim2.new(1, -20, 1, -65)
-ContentFrame.Position = UDim2.new(0, 10, 0, 55)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.Parent = MainFrame
+for _, tab in pairs(Tabs) do
+    tab.Size = UDim2.new(1, 0, 1, 0)
+    tab.BackgroundTransparency = 1
+    tab.Visible = false
+end
+Tabs.Main.Visible = true
 
-local Panels = {}
+-- Hàm tạo nút chuyển Tab (Cũng được bo góc riêng biệt)
+local function createTabButton(name, pos, size, targetTab)
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size = size
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(25, 30, 45)
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
+    
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 6)
 
--- Hệ thống các biến quản lý trạng thái
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local RunService = game:GetService("RunService")
+    btn.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do t.Visible = false end
+        targetTab.Visible = true
+    end)
+    return btn
+end
 
-local SilentAimEnabled = false
-local ShowMyFov = false 
-local TeamCheckEnabled = false
-local EspEnabled = false
-local AimDistanceFOV = 50 
+-- Chia khoảng cách và kích thước nút Tab hợp lý để lộ khoảng trống bo góc
+createTabButton("MAIN", UDim2.new(0.02, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Main)
+createTabButton("ESP", UDim2.new(0.35, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.ESP)
+createTabButton("SETTING", UDim2.new(0.68, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Setting)
 
--- Khởi tạo Vòng Tròn 2D nằm phẳng lỳ trên mặt đất xung quanh bạn (Dùng khối trụ dẹt)
-local MyGroundRing = Instance.new("Part")
-MyGroundRing.Shape = Enum.PartType.Cylinder
-MyGroundRing.Material = Enum.Material.Neon
-MyGroundRing.Color = Color3.fromRGB(0, 162, 255) -- Màu xanh Sky Blue
-MyGroundRing.CanCollide = false
-MyGroundRing.Anchored = true
-MyGroundRing.CastShadow = false
-MyGroundRing.Transparency = 1 -- Mặc định ẩn ban đầu
-MyGroundRing.Parent = workspace
+-- [[ UI ELEMENTS CONSTRUCTION (BO GÓC NÚT + TEXTBOX CHỨC NĂNG) ]]
 
-local function toggleMyRing(visible)
-    if MyGroundRing then
-        MyGroundRing.Transparency = visible and 0.7 or 1
+local function createMenuButton(text, pos, parent, callback)
+    local button = Instance.new("TextButton", parent)
+    button.Size = UDim2.new(0.9, 0, 0, 35)
+    button.Position = pos
+    button.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.SourceSans
+    button.TextSize = 16
+    button.Text = text
+    
+    -- Áp dụng bo góc 6px cho nút chức năng bên trong menu
+    local corner = Instance.new("UICorner", button)
+    corner.CornerRadius = UDim.new(0, 6)
+    
+    button.MouseButton1Click:Connect(function()
+        callback(button)
+    end)
+    return button
+end
+
+-- TAB 1: MAIN
+local aimBtn = createMenuButton("Silent Aim: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.Main, function(b)
+    getgenv().Config.SilentAim = not getgenv().Config.SilentAim
+    b.Text = getgenv().Config.SilentAim and "Silent Aim: ON" or "Silent Aim: OFF"
+    b.BackgroundColor3 = getgenv().Config.SilentAim and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local teamBtn = createMenuButton("Check Team: OFF", UDim2.new(0.05, 0, 0.35, 0), Tabs.Main, function(b)
+    getgenv().Config.CheckTeam = not getgenv().Config.CheckTeam
+    b.Text = getgenv().Config.CheckTeam and "Check Team: ON" or "Check Team: OFF"
+    b.BackgroundColor3 = getgenv().Config.CheckTeam and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local rangeBtn = createMenuButton("Show Range: OFF", UDim2.new(0.05, 0, 0.6, 0), Tabs.Main, function(b)
+    getgenv().Config.ShowRange = not getgenv().Config.ShowRange
+    b.Text = getgenv().Config.ShowRange and "Show Range: ON" or "Show Range: OFF"
+    b.BackgroundColor3 = getgenv().Config.ShowRange and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 2: ESP
+local espBtn = createMenuButton("2D Box & Tracer ESP: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.ESP, function(b)
+    getgenv().Config.ESP = not getgenv().Config.ESP
+    b.Text = getgenv().Config.ESP and "ESP: ON" or "ESP: OFF"
+    b.BackgroundColor3 = getgenv().Config.ESP and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 3: SETTING
+local label = Instance.new("TextLabel", Tabs.Setting)
+label.Size = UDim2.new(0.4, 0, 0, 35)
+label.Position = UDim2.new(0.05, 0, 0.1, 0)
+label.Text = "Silent Aim Range:"
+label.TextColor3 = Color3.fromRGB(255, 255, 255)
+label.BackgroundTransparency = 1
+label.TextXAlignment = Enum.TextXAlignment.Left
+
+local rangeInput = Instance.new("TextBox", Tabs.Setting)
+rangeInput.Size = UDim2.new(0.4, 0, 0, 35)
+rangeInput.Position = UDim2.new(0.5, 0, 0.1, 0)
+rangeInput.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+rangeInput.Text = tostring(getgenv().Config.RangeValue)
+rangeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+rangeInput.Font = Enum.Font.Code
+
+-- Thêm bo góc cho TextBox nhập giá trị vùng bắn (Range)
+local inputCorner = Instance.new("UICorner", rangeInput)
+inputCorner.CornerRadius = UDim.new(0, 6)
+
+rangeInput.FocusLost:Connect(function()
+    local val = tonumber(rangeInput.Text)
+    if val then
+        getgenv().Config.RangeValue = val
+    else
+        rangeInput.Text = tostring(getgenv().Config.RangeValue)
     end
-end
+end)
 
-local Cache = {}
 
--- =================================================================
--- PHẦN XỬ LÝ LOGIC (AIM SILENT, TEAM CHECK, ESP)
--- =================================================================
-
--- Hàm kiểm tra xem có phải đồng đội không
-local function isTeammate(player)
-    if not TeamCheckEnabled then return false end
-    if LocalPlayer.Team and player.Team then return LocalPlayer.Team == player.Team end
-    if LocalPlayer.TeamColor and player.TeamColor then return LocalPlayer.TeamColor == player.TeamColor end
-    return false
-end
-
--- Hàm tìm kẻ địch gần nhất ĐÃ VÀO VÒNG MÉT QUY ĐỊNH và KHÔNG CÙNG TEAM
-local function getClosestPlayerInFOV()
-    local closestPlayer = nil
-    local shortestDistance = math.huge
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
-    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
-
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+-- [[ CORE MECHANICAL LOGIC: BACKEND HOOKS ]]
+local function getClosestPlayer()
+    local target = nil
+    local maxDist = getgenv().Config.RangeValue
+    
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= lp and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            if getgenv().Config.CheckTeam and v.Team == lp.Team then continue end
             
-            if isTeammate(player) then continue end -- Né đồng đội nếu bật check team
-            
-            local distance = (myPos - player.Character.HumanoidRootPart.Position).Magnitude
-            
-            -- Kiểm tra điều kiện khoảng cách (0 = Vô hạn mét)
-            if AimDistanceFOV == 0 or distance <= AimDistanceFOV then
-                if distance < shortestDistance then
-                    closestPlayer = player
-                    shortestDistance = distance
+            local screenPos, onScreen = camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local mousePos = UIS:GetMouseLocation()
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                if dist < maxDist then
+                    maxDist = dist
+                    target = v
                 end
             end
         end
     end
-    return closestPlayer
+    return target
 end
 
--- Hook hệ thống truyền dữ liệu đạn (Remote Namecall)
-local OldNamecall
-OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
-    local Args = {...}
-    local Method = getnamecallmethod()
-    if SilentAimEnabled and (Method == "FireServer" or Method == "InvokeServer") then
-        local success, target = pcall(getClosestPlayerInFOV)
-        if success and target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            -- Khi bấm bắn, đạn sẽ tự bẻ hướng vào người mục tiêu hợp lệ ở đây tùy cấu trúc game
+local mt = getrawmetatable(game)
+local oldIndex = mt.__index
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__index = newcclosure(function(self, key)
+    if not checkcaller() and getgenv().Config.SilentAim and tostring(self) == "Mouse" and key == "Hit" then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart.CFrame
         end
     end
-    return OldNamecall(Self, unpack(Args))
+    return oldIndex(self, key)
 end)
 
--- Vòng lặp cập nhật vị trí Vòng Tròn 2D dẹt dưới đất bám theo chân bạn liên tục
-RunService.RenderStepped:Connect(function()
-    if ShowMyFov and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local myHrp = LocalPlayer.Character.HumanoidRootPart
-        if AimDistanceFOV > 0 then
-            local ringSize = AimDistanceFOV * 2 
-            MyGroundRing.Size = Vector3.new(0.1, ringSize, ringSize)
-            MyGroundRing.CFrame = CFrame.new(myHrp.Position - Vector3.new(0, 3, 0)) * CFrame.Angles(0, 0, math.rad(90))
-            toggleMyRing(true)
-        else
-            toggleMyRing(false)
-        end
-    else
-        toggleMyRing(false)
-    end
-end)
-
--- =================================================================
--- HÀM DỰNG GIAO DIỆN SWITCH VÀ SLIDER THUẦN
--- =================================================================
-
-local function createPanel(name)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 1, 0)
-    frame.BackgroundTransparency = 1
-    frame.Visible = false
-    frame.Parent = ContentFrame
-    Panels[name] = frame
-    return frame
-end
-
-local function createToggle(parent, text, default, callback)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 45)
-    row.BackgroundColor3 = Color3.fromRGB(24, 31, 41)
-    row.Parent = parent
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
     
-    local rowCorner = Instance.new("UICorner")
-    rowCorner.CornerRadius = UDim.new(0, 6)
-    rowCorner.Parent = row
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.7, 0, 1, 0)
-    label.Position = UDim2.new(0, 15, 0, 0)
-    label.Text = text
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.TextSize = 14
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.BackgroundTransparency = 1
-    label.Parent = row
-
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 45, 0, 24)
-    btn.Position = UDim2.new(1, -60, 0.5, -12)
-    btn.BackgroundColor3 = default and Color3.fromRGB(0, 162, 255) or Color3.fromRGB(45, 55, 72)
-    btn.Text = default and "ON" or "OFF"
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.TextSize = 11
-    btn.Font = Enum.Font.SourceSansBold
-    btn.Parent = row
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 12)
-    btnCorner.Parent = btn
-
-    local state = default
-    btn.MouseButton1Click:Connect(function()
-        state = not state
-        btn.BackgroundColor3 = state and Color3.fromRGB(0, 162, 255) or Color3.fromRGB(45, 55, 72)
-        btn.Text = state and "ON" or "OFF"
-        callback(state)
-    end)
-end
-
--- Khởi tạo cấu trúc các Trang Panel (Tab 1, 2, 3)
-local P1 = createPanel("Aim Silent")
-local P2 = createPanel("ESP")
-local P3 = createPanel("Setting")
-
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Spacing = UDim.new(0, 8)
-UIListLayout.Parent = P1
-
-local UIListLayout2 = UIListLayout:Clone()
-UIListLayout2.Parent = P2
-
--- [TAB 1]: Đăng ký tính năng
-createToggle(P1, "Silent Aim Bot", false, function(v) SilentAimEnabled = v end)
-createToggle(P1, "Hiện vùng xung quanh Player", false, function(v) ShowMyFov = v; if not v then toggleMyRing(false) end end)
-createToggle(P1, "Kiểm tra Đội (Team Check)", false, function(v) TeamCheckEnabled = v end)
-
--- [TAB 2]: Đăng ký tính năng
-createToggle(P2, "2D Box & Snaplines (ESP)", false, function(v) EspEnabled = v end)
-
--- [TAB 3]: Đăng ký Ô nhập số khoảng cách ngắm bắn (Thay thế slider kéo nặng máy)
-local SliderRow = Instance.new("Frame")
-SliderRow.Size = UDim2.new(1, 0, 0, 60)
-SliderRow.BackgroundColor3 = Color3.fromRGB(24, 31, 41)
-SliderRow.Parent = P3
-
-local SRCorn = Instance.new("UICorner")
-SRCorn.CornerRadius = UDim.new(0, 6)
-SRCorn.Parent = SliderRow
-
-local SliderLabel = Instance.new("TextLabel")
-SliderLabel.Size = UDim2.new(0.6, 0, 0, 30)
-SliderLabel.Position = UDim2.new(0, 15, 0, 5)
-SliderLabel.Text = "Vùng ngắm Khoảng Cách (m):"
-SliderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-SliderLabel.TextSize = 13
-SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
-SliderLabel.BackgroundTransparency = 1
-SliderLabel.Parent = SliderRow
-
-local ValueBox = Instance.new("TextBox")
-ValueBox.Size = UDim2.new(0, 80, 0, 25)
-ValueBox.Position = UDim2.new(1, -95, 0, 8)
-ValueBox.BackgroundColor3 = Color3.fromRGB(45, 55, 72)
-ValueBox.Text = "50"
-ValueBox.TextColor3 = Color3.fromRGB(0, 162, 255)
-ValueBox.TextSize = 14
-ValueBox.Font = Enum.Font.SourceSansBold
-ValueBox.Parent = SliderRow
-
-local VBCorn = Instance.new("UICorner")
-VBCorn.CornerRadius = UDim.new(0, 4)
-VBCorn.Parent = ValueBox
-
-local SliderDesc = Instance.new("TextLabel")
-SliderDesc.Size = UDim2.new(1, -30, 0, 20)
-SliderDesc.Position = UDim2.new(0, 15, 0, 35)
-SliderDesc.Text = "Nhấn vào ô trên để sửa số mét (Nhập số 0 để bắn Vô Hạn)"
-SliderDesc.TextColor3 = Color3.fromRGB(150, 160, 175)
-SliderDesc.TextSize = 11
-SliderDesc.TextXAlignment = Enum.TextXAlignment.Left
-SliderDesc.BackgroundTransparency = 1
-SliderDesc.Parent = SliderRow
-
-ValueBox.FocusLost:Connect(function()
-    local num = tonumber(ValueBox.Text)
-    if num then
-        AimDistanceFOV = math.clamp(num, 0, 1000)
-        ValueBox.Text = tostring(AimDistanceFOV)
-    else
-        ValueBox.Text = tostring(AimDistanceFOV)
-    end
-end)
-
--- Nút Tự hủy/Đóng hoàn toàn Menu giải phóng bộ nhớ
-local DestroyBtn = Instance.new("TextButton")
-DestroyBtn.Size = UDim2.new(1, 0, 0, 40)
-DestroyBtn.Position = UDim2.new(0, 0, 0, 75)
-DestroyBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-DestroyBtn.Text = "DESTROY MENU"
-DestroyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-DestroyBtn.TextSize = 14
-DestroyBtn.Font = Enum.Font.SourceSansBold
-DestroyBtn.Parent = P3
-
-local DBCorn = Instance.new("UICorner")
-DBCorn.CornerRadius = UDim.new(0, 6)
-DBCorn.Parent = DestroyBtn
-
-DestroyBtn.MouseButton1Click:Connect(function()
-    if MyGroundRing then MyGroundRing:Destroy() end
-    for _, drawings in pairs(Cache) do
-        drawings.Box:Remove(); drawings.Text:Remove(); drawings.Line:Remove()
-    end
-    UI:Destroy()
-end)
-
--- =================================================================
--- KHỞI TẠO NÚT CLICK CHUYỂN ĐỔI QUA LẠI GIỮA CÁC TAB
--- =================================================================
-local tabNames = {"Aim Silent", "ESP", "Setting"}
-for i, name in ipairs(tabNames) do
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1 / #tabNames, 0, 1, 0)
-    btn.Position = UDim2.new((i - 1) / #tabNames, 0, 0, 0)
-    btn.BackgroundTransparency = 1
-    btn.Text = name
-    btn.TextColor3 = i == 1 and Color3.fromRGB(0, 162, 255) or Color3.fromRGB(150, 150, 150)
-    btn.TextSize = 13
-    btn.Font = Enum.Font.SourceSansBold
-    btn.Parent = TabBar
-
-    btn.MouseButton1Click:Connect(function()
-        for _, p in pairs(Panels) do p.Visible = false end
-        for _, b in pairs(TabBar:GetChildren()) do
-            if b:IsA("TextButton") then b.TextColor3 = Color3.fromRGB(150, 150, 150) end
+    if not checkcaller() and getgenv().Config.SilentAim and (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "Raycast") then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart, target.Character.HumanoidRootPart.Position
         end
-        Panels[name].Visible = true
-        btn.TextColor3 = Color3.fromRGB(0, 162, 255)
+    end
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
+
+
+-- [[ VISUAL RENDERING: DRAWING API (ESP & RANGE) ]]
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 1.5
+fovCircle.Color = Color3.fromRGB(135, 206, 250)
+fovCircle.Filled = false
+fovCircle.Transparency = 0.6
+
+local espCache = {}
+
+local function createEspDrawings()
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Color = Color3.fromRGB(255, 0, 0)
+    box.Filled = false
+    box.Visible = false
+    
+    local line = Drawing.new("Line")
+    line.Thickness = 1
+    line.Color = Color3.fromRGB(135, 206, 250)
+    line.Visible = false
+    
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Color = Color3.fromRGB(255, 255, 255)
+    text.Visible = false
+
+    return {Box = box, Line = line, Text = text}
+end
+
+RunService.RenderStepped:Connect(function()
+    if getgenv().Config.ShowRange then
+        fovCircle.Radius = getgenv().Config.RangeValue
+        fovCircle.Position = UIS:GetMouseLocation()
+        fovCircle.Visible = true
+    else
+        fovCircle.Visible = false
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p == lp then continue end
+        if not espCache[p] then espCache[p] = createEspDrawings() end
+        
+        local drawings = espCache[p]
+        local isVisible = false
+        
+        if getgenv().Config.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            if not (getgenv().Config.CheckTeam and p.Team == lp.Team) then
+                local hrp = p.Character.HumanoidRootPart
+                local hrpPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+                
+                if onScreen then
+                    local scale = 1 / (hrpPos.Z * math.tan(math.rad(camera.FieldOfView * 0.5))) * 1000
+                    local w, h = 2.5 * scale, 4.5 * scale
+                    
+                    drawings.Box.Size = Vector2.new(w, h)
+                    drawings.Box.Position = Vector2.new(hrpPos.X - w/2, hrpPos.Y - h/2)
+                    drawings.Box.Visible = true
+                    
+                    drawings.Line.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                    drawings.Line.To = Vector2.new(hrpPos.X, hrpPos.Y + h/2)
+                    drawings.Line.Visible = true
+                    
+                    local distance = math.floor((hrp.Position - camera.CFrame.Position).Magnitude)
+                    drawings.Text.Text = p.Name .. " [" .. tostring(distance) .. "m]"
+                    drawings.Text.Position = Vector2.new(hrpPos.X, hrpPos.Y - h/2 - 18)
+                    drawings.Text.Visible = true
+                    
+                    isVisible = true
+                end
+            end
+        end
+        
+        if not isVisible then
+            drawings.Box.Visible = false
+            drawings.Line.Visible = false
+            drawings.Text.Visible = false
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    if espCache[p] then
+        espCache[p].Box:Remove()
+        espCache[p].Line:Remove()
+        espCache[p].Text:Remove()
+        espCache[p] = nil
+    end
+end)-- [[ CONFIGURATION & GLOBALS ]]
+getgenv().Config = {
+    SilentAim = false,
+    CheckTeam = false,
+    ShowRange = false,
+    RangeValue = 100,
+    ESP = false
+}
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- [[ SCREEN GUI ]]
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SkyGui_Mobile_Rounded"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- [[ UTILS: DRAG LOGIC FOR MOBILE/PC ]]
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            dragInput = input
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
     end)
 end
 
--- Hiển thị mặc định giao diện Tab Aim lúc mới chạy script
-Panels["Aim Silent"].Visible = true
+-- [[ UTILS: ROUNDED CORNERS & BLUE SKY PULSE EFFECT ]]
+local function applyGlowPulseAndRound(instance, cornerRadius)
+    -- Thêm bo góc cho thực thể
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, cornerRadius or 8)
+    uiCorner.Parent = instance
 
--- =================================================================
--- HỆ THỐNG VẼ ĐỒ HỌA ESP (SỬ DỤNG DRAWING API ĐỂ KHÔNG BỊ TRỄ)
--- =================================================================
-local function createEsp(player)
-    local box = Drawing.new("Square")
-    box.Visible = false; box.Color = Color3.fromRGB(0, 162, 255); box.Thickness = 1.5; box.Filled = false
-    local text = Drawing.new("Text")
-    text.Visible = false; text.Color = Color3.fromRGB(255, 255, 255); text.Size = 14; text.Center = true
-    local line = Drawing.new("Line")
-    line.Visible = false; line.Color = Color3.fromRGB(0, 162, 255); line.Thickness = 1; line.Transparency = 0.6
-    Cache[player] = {Box = box, Text = text, Line = line}
+    -- Tạo viền sáng (Stroke)
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = Color3.fromRGB(135, 206, 250) -- Blue Sky
+    uiStroke.Thickness = 2.5
+    uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    uiStroke.Parent = instance
+
+    -- Tạo luồng hiệu ứng nhịp đập
+    task.spawn(function()
+        while instance and instance.Parent do
+            if not instance or not instance.Parent then break end
+            uiStroke.Thickness = 1.5 + (math.sin(tick() * 5) * 1.5)
+            task.wait(0.02)
+        end
+    end)
 end
 
-local function removeEsp(player)
-    if Cache[player] then
-        Cache[player].Box:Remove(); Cache[player].Text:Remove(); Cache[player].Line:Remove()
-        Cache[player] = nil
+-- [[ MAIN UI ELEMENTS ]]
+-- 1. Nút Bật/Tắt Menu (Bo góc tròn 12px)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 60, 0, 60)
+ToggleBtn.Position = UDim2.new(0.1, 0, 0.2, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
+ToggleBtn.Text = "MENU"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 14
+ToggleBtn.Parent = ScreenGui
+makeDraggable(ToggleBtn)
+applyGlowPulseAndRound(ToggleBtn, 12)
+
+-- 2. Khung Menu Chính (Bo góc 10px)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 350, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -125)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+makeDraggable(MainFrame)
+applyGlowPulseAndRound(MainFrame, 10)
+
+-- Sự kiện ẩn hiển menu khi click nút
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- [[ TAB SYSTEM INTERFACE ]]
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, 0, 0, 40)
+TabBar.BackgroundTransparency = 1 -- Để lộ nền bo góc của khung chính
+
+local Container = Instance.new("Frame", MainFrame)
+Container.Size = UDim2.new(1, 0, 1, -40)
+Container.Position = UDim2.new(0, 0, 0, 40)
+Container.BackgroundTransparency = 1
+
+local Tabs = {
+    Main = Instance.new("Frame", Container),
+    ESP = Instance.new("Frame", Container),
+    Setting = Instance.new("Frame", Container)
+}
+
+for _, tab in pairs(Tabs) do
+    tab.Size = UDim2.new(1, 0, 1, 0)
+    tab.BackgroundTransparency = 1
+    tab.Visible = false
+end
+Tabs.Main.Visible = true
+
+-- Hàm tạo nút chuyển Tab (Cũng được bo góc riêng biệt)
+local function createTabButton(name, pos, size, targetTab)
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size = size
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(25, 30, 45)
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
+    
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do t.Visible = false end
+        targetTab.Visible = true
+    end)
+    return btn
+end
+
+-- Chia khoảng cách và kích thước nút Tab hợp lý để lộ khoảng trống bo góc
+createTabButton("MAIN", UDim2.new(0.02, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Main)
+createTabButton("ESP", UDim2.new(0.35, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.ESP)
+createTabButton("SETTING", UDim2.new(0.68, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Setting)
+
+-- [[ UI ELEMENTS CONSTRUCTION (BO GÓC NÚT + TEXTBOX CHỨC NĂNG) ]]
+
+local function createMenuButton(text, pos, parent, callback)
+    local button = Instance.new("TextButton", parent)
+    button.Size = UDim2.new(0.9, 0, 0, 35)
+    button.Position = pos
+    button.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.SourceSans
+    button.TextSize = 16
+    button.Text = text
+    
+    -- Áp dụng bo góc 6px cho nút chức năng bên trong menu
+    local corner = Instance.new("UICorner", button)
+    corner.CornerRadius = UDim.new(0, 6)
+    
+    button.MouseButton1Click:Connect(function()
+        callback(button)
+    end)
+    return button
+end
+
+-- TAB 1: MAIN
+local aimBtn = createMenuButton("Silent Aim: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.Main, function(b)
+    getgenv().Config.SilentAim = not getgenv().Config.SilentAim
+    b.Text = getgenv().Config.SilentAim and "Silent Aim: ON" or "Silent Aim: OFF"
+    b.BackgroundColor3 = getgenv().Config.SilentAim and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local teamBtn = createMenuButton("Check Team: OFF", UDim2.new(0.05, 0, 0.35, 0), Tabs.Main, function(b)
+    getgenv().Config.CheckTeam = not getgenv().Config.CheckTeam
+    b.Text = getgenv().Config.CheckTeam and "Check Team: ON" or "Check Team: OFF"
+    b.BackgroundColor3 = getgenv().Config.CheckTeam and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local rangeBtn = createMenuButton("Show Range: OFF", UDim2.new(0.05, 0, 0.6, 0), Tabs.Main, function(b)
+    getgenv().Config.ShowRange = not getgenv().Config.ShowRange
+    b.Text = getgenv().Config.ShowRange and "Show Range: ON" or "Show Range: OFF"
+    b.BackgroundColor3 = getgenv().Config.ShowRange and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 2: ESP
+local espBtn = createMenuButton("2D Box & Tracer ESP: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.ESP, function(b)
+    getgenv().Config.ESP = not getgenv().Config.ESP
+    b.Text = getgenv().Config.ESP and "ESP: ON" or "ESP: OFF"
+    b.BackgroundColor3 = getgenv().Config.ESP and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 3: SETTING
+local label = Instance.new("TextLabel", Tabs.Setting)
+label.Size = UDim2.new(0.4, 0, 0, 35)
+label.Position = UDim2.new(0.05, 0, 0.1, 0)
+label.Text = "Silent Aim Range:"
+label.TextColor3 = Color3.fromRGB(255, 255, 255)
+label.BackgroundTransparency = 1
+label.TextXAlignment = Enum.TextXAlignment.Left
+
+local rangeInput = Instance.new("TextBox", Tabs.Setting)
+rangeInput.Size = UDim2.new(0.4, 0, 0, 35)
+rangeInput.Position = UDim2.new(0.5, 0, 0.1, 0)
+rangeInput.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+rangeInput.Text = tostring(getgenv().Config.RangeValue)
+rangeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+rangeInput.Font = Enum.Font.Code
+
+-- Thêm bo góc cho TextBox nhập giá trị vùng bắn (Range)
+local inputCorner = Instance.new("UICorner", rangeInput)
+inputCorner.CornerRadius = UDim.new(0, 6)
+
+rangeInput.FocusLost:Connect(function()
+    local val = tonumber(rangeInput.Text)
+    if val then
+        getgenv().Config.RangeValue = val
+    else
+        rangeInput.Text = tostring(getgenv().Config.RangeValue)
     end
+end)
+
+
+-- [[ CORE MECHANICAL LOGIC: BACKEND HOOKS ]]
+local function getClosestPlayer()
+    local target = nil
+    local maxDist = getgenv().Config.RangeValue
+    
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= lp and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            if getgenv().Config.CheckTeam and v.Team == lp.Team then continue end
+            
+            local screenPos, onScreen = camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local mousePos = UIS:GetMouseLocation()
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                if dist < maxDist then
+                    maxDist = dist
+                    target = v
+                end
+            end
+        end
+    end
+    return target
 end
 
-for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then createEsp(p) end end
-Players
+local mt = getrawmetatable(game)
+local oldIndex = mt.__index
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__index = newcclosure(function(self, key)
+    if not checkcaller() and getgenv().Config.SilentAim and tostring(self) == "Mouse" and key == "Hit" then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart.CFrame
+        end
+    end
+    return oldIndex(self, key)
+end)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    if not checkcaller() and getgenv().Config.SilentAim and (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "Raycast") then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart, target.Character.HumanoidRootPart.Position
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
+
+
+-- [[ VISUAL RENDERING: DRAWING API (ESP & RANGE) ]]
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 1.5
+fovCircle.Color = Color3.fromRGB(135, 206, 250)
+fovCircle.Filled = false
+fovCircle.Transparency = 0.6
+
+local espCache = {}
+
+local function createEspDrawings()
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Color = Color3.fromRGB(255, 0, 0)
+    box.Filled = false
+    box.Visible = false
+    
+    local line = Drawing.new("Line")
+    line.Thickness = 1
+    line.Color = Color3.fromRGB(135, 206, 250)
+    line.Visible = false
+    
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Color = Color3.fromRGB(255, 255, 255)
+    text.Visible = false
+
+    return {Box = box, Line = line, Text = text}
+end
+
+RunService.RenderStepped:Connect(function()
+    if getgenv().Config.ShowRange then
+        fovCircle.Radius = getgenv().Config.RangeValue
+        fovCircle.Position = UIS:GetMouseLocation()
+        fovCircle.Visible = true
+    else
+        fovCircle.Visible = false
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p == lp then continue end
+        if not espCache[p] then espCache[p] = createEspDrawings() end
+        
+        local drawings = espCache[p]
+        local isVisible = false
+        
+        if getgenv().Config.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            if not (getgenv().Config.CheckTeam and p.Team == lp.Team) then
+                local hrp = p.Character.HumanoidRootPart
+                local hrpPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+                
+                if onScreen then
+                    local scale = 1 / (hrpPos.Z * math.tan(math.rad(camera.FieldOfView * 0.5))) * 1000
+                    local w, h = 2.5 * scale, 4.5 * scale
+                    
+                    drawings.Box.Size = Vector2.new(w, h)
+                    drawings.Box.Position = Vector2.new(hrpPos.X - w/2, hrpPos.Y - h/2)
+                    drawings.Box.Visible = true
+                    
+                    drawings.Line.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                    drawings.Line.To = Vector2.new(hrpPos.X, hrpPos.Y + h/2)
+                    drawings.Line.Visible = true
+                    
+                    local distance = math.floor((hrp.Position - camera.CFrame.Position).Magnitude)
+                    drawings.Text.Text = p.Name .. " [" .. tostring(distance) .. "m]"
+                    drawings.Text.Position = Vector2.new(hrpPos.X, hrpPos.Y - h/2 - 18)
+                    drawings.Text.Visible = true
+                    
+                    isVisible = true
+                end
+            end
+        end
+        
+        if not isVisible then
+            drawings.Box.Visible = false
+            drawings.Line.Visible = false
+            drawings.Text.Visible = false
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    if espCache[p] then
+        espCache[p].Box:Remove()
+        espCache[p].Line:Remove()
+        espCache[p].Text:Remove()
+        espCache[p] = nil
+    end
+end)-- [[ CONFIGURATION & GLOBALS ]]
+getgenv().Config = {
+    SilentAim = false,
+    CheckTeam = false,
+    ShowRange = false,
+    RangeValue = 100,
+    ESP = false
+}
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- [[ SCREEN GUI ]]
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SkyGui_Mobile_Rounded"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- [[ UTILS: DRAG LOGIC FOR MOBILE/PC ]]
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            dragInput = input
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- [[ UTILS: ROUNDED CORNERS & BLUE SKY PULSE EFFECT ]]
+local function applyGlowPulseAndRound(instance, cornerRadius)
+    -- Thêm bo góc cho thực thể
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, cornerRadius or 8)
+    uiCorner.Parent = instance
+
+    -- Tạo viền sáng (Stroke)
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = Color3.fromRGB(135, 206, 250) -- Blue Sky
+    uiStroke.Thickness = 2.5
+    uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    uiStroke.Parent = instance
+
+    -- Tạo luồng hiệu ứng nhịp đập
+    task.spawn(function()
+        while instance and instance.Parent do
+            if not instance or not instance.Parent then break end
+            uiStroke.Thickness = 1.5 + (math.sin(tick() * 5) * 1.5)
+            task.wait(0.02)
+        end
+    end)
+end
+
+-- [[ MAIN UI ELEMENTS ]]
+-- 1. Nút Bật/Tắt Menu (Bo góc tròn 12px)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 60, 0, 60)
+ToggleBtn.Position = UDim2.new(0.1, 0, 0.2, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
+ToggleBtn.Text = "MENU"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 14
+ToggleBtn.Parent = ScreenGui
+makeDraggable(ToggleBtn)
+applyGlowPulseAndRound(ToggleBtn, 12)
+
+-- 2. Khung Menu Chính (Bo góc 10px)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 350, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -125)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+makeDraggable(MainFrame)
+applyGlowPulseAndRound(MainFrame, 10)
+
+-- Sự kiện ẩn hiển menu khi click nút
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- [[ TAB SYSTEM INTERFACE ]]
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, 0, 0, 40)
+TabBar.BackgroundTransparency = 1 -- Để lộ nền bo góc của khung chính
+
+local Container = Instance.new("Frame", MainFrame)
+Container.Size = UDim2.new(1, 0, 1, -40)
+Container.Position = UDim2.new(0, 0, 0, 40)
+Container.BackgroundTransparency = 1
+
+local Tabs = {
+    Main = Instance.new("Frame", Container),
+    ESP = Instance.new("Frame", Container),
+    Setting = Instance.new("Frame", Container)
+}
+
+for _, tab in pairs(Tabs) do
+    tab.Size = UDim2.new(1, 0, 1, 0)
+    tab.BackgroundTransparency = 1
+    tab.Visible = false
+end
+Tabs.Main.Visible = true
+
+-- Hàm tạo nút chuyển Tab (Cũng được bo góc riêng biệt)
+local function createTabButton(name, pos, size, targetTab)
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size = size
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(25, 30, 45)
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
+    
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do t.Visible = false end
+        targetTab.Visible = true
+    end)
+    return btn
+end
+
+-- Chia khoảng cách và kích thước nút Tab hợp lý để lộ khoảng trống bo góc
+createTabButton("MAIN", UDim2.new(0.02, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Main)
+createTabButton("ESP", UDim2.new(0.35, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.ESP)
+createTabButton("SETTING", UDim2.new(0.68, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Setting)
+
+-- [[ UI ELEMENTS CONSTRUCTION (BO GÓC NÚT + TEXTBOX CHỨC NĂNG) ]]
+
+local function createMenuButton(text, pos, parent, callback)
+    local button = Instance.new("TextButton", parent)
+    button.Size = UDim2.new(0.9, 0, 0, 35)
+    button.Position = pos
+    button.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.SourceSans
+    button.TextSize = 16
+    button.Text = text
+    
+    -- Áp dụng bo góc 6px cho nút chức năng bên trong menu
+    local corner = Instance.new("UICorner", button)
+    corner.CornerRadius = UDim.new(0, 6)
+    
+    button.MouseButton1Click:Connect(function()
+        callback(button)
+    end)
+    return button
+end
+
+-- TAB 1: MAIN
+local aimBtn = createMenuButton("Silent Aim: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.Main, function(b)
+    getgenv().Config.SilentAim = not getgenv().Config.SilentAim
+    b.Text = getgenv().Config.SilentAim and "Silent Aim: ON" or "Silent Aim: OFF"
+    b.BackgroundColor3 = getgenv().Config.SilentAim and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local teamBtn = createMenuButton("Check Team: OFF", UDim2.new(0.05, 0, 0.35, 0), Tabs.Main, function(b)
+    getgenv().Config.CheckTeam = not getgenv().Config.CheckTeam
+    b.Text = getgenv().Config.CheckTeam and "Check Team: ON" or "Check Team: OFF"
+    b.BackgroundColor3 = getgenv().Config.CheckTeam and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local rangeBtn = createMenuButton("Show Range: OFF", UDim2.new(0.05, 0, 0.6, 0), Tabs.Main, function(b)
+    getgenv().Config.ShowRange = not getgenv().Config.ShowRange
+    b.Text = getgenv().Config.ShowRange and "Show Range: ON" or "Show Range: OFF"
+    b.BackgroundColor3 = getgenv().Config.ShowRange and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 2: ESP
+local espBtn = createMenuButton("2D Box & Tracer ESP: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.ESP, function(b)
+    getgenv().Config.ESP = not getgenv().Config.ESP
+    b.Text = getgenv().Config.ESP and "ESP: ON" or "ESP: OFF"
+    b.BackgroundColor3 = getgenv().Config.ESP and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 3: SETTING
+local label = Instance.new("TextLabel", Tabs.Setting)
+label.Size = UDim2.new(0.4, 0, 0, 35)
+label.Position = UDim2.new(0.05, 0, 0.1, 0)
+label.Text = "Silent Aim Range:"
+label.TextColor3 = Color3.fromRGB(255, 255, 255)
+label.BackgroundTransparency = 1
+label.TextXAlignment = Enum.TextXAlignment.Left
+
+local rangeInput = Instance.new("TextBox", Tabs.Setting)
+rangeInput.Size = UDim2.new(0.4, 0, 0, 35)
+rangeInput.Position = UDim2.new(0.5, 0, 0.1, 0)
+rangeInput.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+rangeInput.Text = tostring(getgenv().Config.RangeValue)
+rangeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+rangeInput.Font = Enum.Font.Code
+
+-- Thêm bo góc cho TextBox nhập giá trị vùng bắn (Range)
+local inputCorner = Instance.new("UICorner", rangeInput)
+inputCorner.CornerRadius = UDim.new(0, 6)
+
+rangeInput.FocusLost:Connect(function()
+    local val = tonumber(rangeInput.Text)
+    if val then
+        getgenv().Config.RangeValue = val
+    else
+        rangeInput.Text = tostring(getgenv().Config.RangeValue)
+    end
+end)
+
+
+-- [[ CORE MECHANICAL LOGIC: BACKEND HOOKS ]]
+local function getClosestPlayer()
+    local target = nil
+    local maxDist = getgenv().Config.RangeValue
+    
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= lp and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            if getgenv().Config.CheckTeam and v.Team == lp.Team then continue end
+            
+            local screenPos, onScreen = camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local mousePos = UIS:GetMouseLocation()
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                if dist < maxDist then
+                    maxDist = dist
+                    target = v
+                end
+            end
+        end
+    end
+    return target
+end
+
+local mt = getrawmetatable(game)
+local oldIndex = mt.__index
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__index = newcclosure(function(self, key)
+    if not checkcaller() and getgenv().Config.SilentAim and tostring(self) == "Mouse" and key == "Hit" then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart.CFrame
+        end
+    end
+    return oldIndex(self, key)
+end)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    if not checkcaller() and getgenv().Config.SilentAim and (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "Raycast") then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart, target.Character.HumanoidRootPart.Position
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
+
+
+-- [[ VISUAL RENDERING: DRAWING API (ESP & RANGE) ]]
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 1.5
+fovCircle.Color = Color3.fromRGB(135, 206, 250)
+fovCircle.Filled = false
+fovCircle.Transparency = 0.6
+
+local espCache = {}
+
+local function createEspDrawings()
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Color = Color3.fromRGB(255, 0, 0)
+    box.Filled = false
+    box.Visible = false
+    
+    local line = Drawing.new("Line")
+    line.Thickness = 1
+    line.Color = Color3.fromRGB(135, 206, 250)
+    line.Visible = false
+    
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Color = Color3.fromRGB(255, 255, 255)
+    text.Visible = false
+
+    return {Box = box, Line = line, Text = text}
+end
+
+RunService.RenderStepped:Connect(function()
+    if getgenv().Config.ShowRange then
+        fovCircle.Radius = getgenv().Config.RangeValue
+        fovCircle.Position = UIS:GetMouseLocation()
+        fovCircle.Visible = true
+    else
+        fovCircle.Visible = false
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p == lp then continue end
+        if not espCache[p] then espCache[p] = createEspDrawings() end
+        
+        local drawings = espCache[p]
+        local isVisible = false
+        
+        if getgenv().Config.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            if not (getgenv().Config.CheckTeam and p.Team == lp.Team) then
+                local hrp = p.Character.HumanoidRootPart
+                local hrpPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+                
+                if onScreen then
+                    local scale = 1 / (hrpPos.Z * math.tan(math.rad(camera.FieldOfView * 0.5))) * 1000
+                    local w, h = 2.5 * scale, 4.5 * scale
+                    
+                    drawings.Box.Size = Vector2.new(w, h)
+                    drawings.Box.Position = Vector2.new(hrpPos.X - w/2, hrpPos.Y - h/2)
+                    drawings.Box.Visible = true
+                    
+                    drawings.Line.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                    drawings.Line.To = Vector2.new(hrpPos.X, hrpPos.Y + h/2)
+                    drawings.Line.Visible = true
+                    
+                    local distance = math.floor((hrp.Position - camera.CFrame.Position).Magnitude)
+                    drawings.Text.Text = p.Name .. " [" .. tostring(distance) .. "m]"
+                    drawings.Text.Position = Vector2.new(hrpPos.X, hrpPos.Y - h/2 - 18)
+                    drawings.Text.Visible = true
+                    
+                    isVisible = true
+                end
+            end
+        end
+        
+        if not isVisible then
+            drawings.Box.Visible = false
+            drawings.Line.Visible = false
+            drawings.Text.Visible = false
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    if espCache[p] then
+        espCache[p].Box:Remove()
+        espCache[p].Line:Remove()
+        espCache[p].Text:Remove()
+        espCache[p] = nil
+    end
+end)-- [[ CONFIGURATION & GLOBALS ]]
+getgenv().Config = {
+    SilentAim = false,
+    CheckTeam = false,
+    ShowRange = false,
+    RangeValue = 100,
+    ESP = false
+}
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- [[ SCREEN GUI ]]
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SkyGui_Mobile_Rounded"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- [[ UTILS: DRAG LOGIC FOR MOBILE/PC ]]
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            dragInput = input
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- [[ UTILS: ROUNDED CORNERS & BLUE SKY PULSE EFFECT ]]
+local function applyGlowPulseAndRound(instance, cornerRadius)
+    -- Thêm bo góc cho thực thể
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, cornerRadius or 8)
+    uiCorner.Parent = instance
+
+    -- Tạo viền sáng (Stroke)
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = Color3.fromRGB(135, 206, 250) -- Blue Sky
+    uiStroke.Thickness = 2.5
+    uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    uiStroke.Parent = instance
+
+    -- Tạo luồng hiệu ứng nhịp đập
+    task.spawn(function()
+        while instance and instance.Parent do
+            if not instance or not instance.Parent then break end
+            uiStroke.Thickness = 1.5 + (math.sin(tick() * 5) * 1.5)
+            task.wait(0.02)
+        end
+    end)
+end
+
+-- [[ MAIN UI ELEMENTS ]]
+-- 1. Nút Bật/Tắt Menu (Bo góc tròn 12px)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 60, 0, 60)
+ToggleBtn.Position = UDim2.new(0.1, 0, 0.2, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
+ToggleBtn.Text = "MENU"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 14
+ToggleBtn.Parent = ScreenGui
+makeDraggable(ToggleBtn)
+applyGlowPulseAndRound(ToggleBtn, 12)
+
+-- 2. Khung Menu Chính (Bo góc 10px)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 350, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -125)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+makeDraggable(MainFrame)
+applyGlowPulseAndRound(MainFrame, 10)
+
+-- Sự kiện ẩn hiển menu khi click nút
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- [[ TAB SYSTEM INTERFACE ]]
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, 0, 0, 40)
+TabBar.BackgroundTransparency = 1 -- Để lộ nền bo góc của khung chính
+
+local Container = Instance.new("Frame", MainFrame)
+Container.Size = UDim2.new(1, 0, 1, -40)
+Container.Position = UDim2.new(0, 0, 0, 40)
+Container.BackgroundTransparency = 1
+
+local Tabs = {
+    Main = Instance.new("Frame", Container),
+    ESP = Instance.new("Frame", Container),
+    Setting = Instance.new("Frame", Container)
+}
+
+for _, tab in pairs(Tabs) do
+    tab.Size = UDim2.new(1, 0, 1, 0)
+    tab.BackgroundTransparency = 1
+    tab.Visible = false
+end
+Tabs.Main.Visible = true
+
+-- Hàm tạo nút chuyển Tab (Cũng được bo góc riêng biệt)
+local function createTabButton(name, pos, size, targetTab)
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size = size
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(25, 30, 45)
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
+    
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do t.Visible = false end
+        targetTab.Visible = true
+    end)
+    return btn
+end
+
+-- Chia khoảng cách và kích thước nút Tab hợp lý để lộ khoảng trống bo góc
+createTabButton("MAIN", UDim2.new(0.02, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Main)
+createTabButton("ESP", UDim2.new(0.35, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.ESP)
+createTabButton("SETTING", UDim2.new(0.68, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Setting)
+
+-- [[ UI ELEMENTS CONSTRUCTION (BO GÓC NÚT + TEXTBOX CHỨC NĂNG) ]]
+
+local function createMenuButton(text, pos, parent, callback)
+    local button = Instance.new("TextButton", parent)
+    button.Size = UDim2.new(0.9, 0, 0, 35)
+    button.Position = pos
+    button.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.SourceSans
+    button.TextSize = 16
+    button.Text = text
+    
+    -- Áp dụng bo góc 6px cho nút chức năng bên trong menu
+    local corner = Instance.new("UICorner", button)
+    corner.CornerRadius = UDim.new(0, 6)
+    
+    button.MouseButton1Click:Connect(function()
+        callback(button)
+    end)
+    return button
+end
+
+-- TAB 1: MAIN
+local aimBtn = createMenuButton("Silent Aim: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.Main, function(b)
+    getgenv().Config.SilentAim = not getgenv().Config.SilentAim
+    b.Text = getgenv().Config.SilentAim and "Silent Aim: ON" or "Silent Aim: OFF"
+    b.BackgroundColor3 = getgenv().Config.SilentAim and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local teamBtn = createMenuButton("Check Team: OFF", UDim2.new(0.05, 0, 0.35, 0), Tabs.Main, function(b)
+    getgenv().Config.CheckTeam = not getgenv().Config.CheckTeam
+    b.Text = getgenv().Config.CheckTeam and "Check Team: ON" or "Check Team: OFF"
+    b.BackgroundColor3 = getgenv().Config.CheckTeam and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local rangeBtn = createMenuButton("Show Range: OFF", UDim2.new(0.05, 0, 0.6, 0), Tabs.Main, function(b)
+    getgenv().Config.ShowRange = not getgenv().Config.ShowRange
+    b.Text = getgenv().Config.ShowRange and "Show Range: ON" or "Show Range: OFF"
+    b.BackgroundColor3 = getgenv().Config.ShowRange and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 2: ESP
+local espBtn = createMenuButton("2D Box & Tracer ESP: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.ESP, function(b)
+    getgenv().Config.ESP = not getgenv().Config.ESP
+    b.Text = getgenv().Config.ESP and "ESP: ON" or "ESP: OFF"
+    b.BackgroundColor3 = getgenv().Config.ESP and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 3: SETTING
+local label = Instance.new("TextLabel", Tabs.Setting)
+label.Size = UDim2.new(0.4, 0, 0, 35)
+label.Position = UDim2.new(0.05, 0, 0.1, 0)
+label.Text = "Silent Aim Range:"
+label.TextColor3 = Color3.fromRGB(255, 255, 255)
+label.BackgroundTransparency = 1
+label.TextXAlignment = Enum.TextXAlignment.Left
+
+local rangeInput = Instance.new("TextBox", Tabs.Setting)
+rangeInput.Size = UDim2.new(0.4, 0, 0, 35)
+rangeInput.Position = UDim2.new(0.5, 0, 0.1, 0)
+rangeInput.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+rangeInput.Text = tostring(getgenv().Config.RangeValue)
+rangeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+rangeInput.Font = Enum.Font.Code
+
+-- Thêm bo góc cho TextBox nhập giá trị vùng bắn (Range)
+local inputCorner = Instance.new("UICorner", rangeInput)
+inputCorner.CornerRadius = UDim.new(0, 6)
+
+rangeInput.FocusLost:Connect(function()
+    local val = tonumber(rangeInput.Text)
+    if val then
+        getgenv().Config.RangeValue = val
+    else
+        rangeInput.Text = tostring(getgenv().Config.RangeValue)
+    end
+end)
+
+
+-- [[ CORE MECHANICAL LOGIC: BACKEND HOOKS ]]
+local function getClosestPlayer()
+    local target = nil
+    local maxDist = getgenv().Config.RangeValue
+    
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= lp and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            if getgenv().Config.CheckTeam and v.Team == lp.Team then continue end
+            
+            local screenPos, onScreen = camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local mousePos = UIS:GetMouseLocation()
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                if dist < maxDist then
+                    maxDist = dist
+                    target = v
+                end
+            end
+        end
+    end
+    return target
+end
+
+local mt = getrawmetatable(game)
+local oldIndex = mt.__index
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__index = newcclosure(function(self, key)
+    if not checkcaller() and getgenv().Config.SilentAim and tostring(self) == "Mouse" and key == "Hit" then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart.CFrame
+        end
+    end
+    return oldIndex(self, key)
+end)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    if not checkcaller() and getgenv().Config.SilentAim and (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "Raycast") then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart, target.Character.HumanoidRootPart.Position
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
+
+
+-- [[ VISUAL RENDERING: DRAWING API (ESP & RANGE) ]]
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 1.5
+fovCircle.Color = Color3.fromRGB(135, 206, 250)
+fovCircle.Filled = false
+fovCircle.Transparency = 0.6
+
+local espCache = {}
+
+local function createEspDrawings()
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Color = Color3.fromRGB(255, 0, 0)
+    box.Filled = false
+    box.Visible = false
+    
+    local line = Drawing.new("Line")
+    line.Thickness = 1
+    line.Color = Color3.fromRGB(135, 206, 250)
+    line.Visible = false
+    
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Color = Color3.fromRGB(255, 255, 255)
+    text.Visible = false
+
+    return {Box = box, Line = line, Text = text}
+end
+
+RunService.RenderStepped:Connect(function()
+    if getgenv().Config.ShowRange then
+        fovCircle.Radius = getgenv().Config.RangeValue
+        fovCircle.Position = UIS:GetMouseLocation()
+        fovCircle.Visible = true
+    else
+        fovCircle.Visible = false
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p == lp then continue end
+        if not espCache[p] then espCache[p] = createEspDrawings() end
+        
+        local drawings = espCache[p]
+        local isVisible = false
+        
+        if getgenv().Config.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            if not (getgenv().Config.CheckTeam and p.Team == lp.Team) then
+                local hrp = p.Character.HumanoidRootPart
+                local hrpPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+                
+                if onScreen then
+                    local scale = 1 / (hrpPos.Z * math.tan(math.rad(camera.FieldOfView * 0.5))) * 1000
+                    local w, h = 2.5 * scale, 4.5 * scale
+                    
+                    drawings.Box.Size = Vector2.new(w, h)
+                    drawings.Box.Position = Vector2.new(hrpPos.X - w/2, hrpPos.Y - h/2)
+                    drawings.Box.Visible = true
+                    
+                    drawings.Line.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                    drawings.Line.To = Vector2.new(hrpPos.X, hrpPos.Y + h/2)
+                    drawings.Line.Visible = true
+                    
+                    local distance = math.floor((hrp.Position - camera.CFrame.Position).Magnitude)
+                    drawings.Text.Text = p.Name .. " [" .. tostring(distance) .. "m]"
+                    drawings.Text.Position = Vector2.new(hrpPos.X, hrpPos.Y - h/2 - 18)
+                    drawings.Text.Visible = true
+                    
+                    isVisible = true
+                end
+            end
+        end
+        
+        if not isVisible then
+            drawings.Box.Visible = false
+            drawings.Line.Visible = false
+            drawings.Text.Visible = false
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    if espCache[p] then
+        espCache[p].Box:Remove()
+        espCache[p].Line:Remove()
+        espCache[p].Text:Remove()
+        espCache[p] = nil
+    end
+end)-- [[ CONFIGURATION & GLOBALS ]]
+getgenv().Config = {
+    SilentAim = false,
+    CheckTeam = false,
+    ShowRange = false,
+    RangeValue = 100,
+    ESP = false
+}
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- [[ SCREEN GUI ]]
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SkyGui_Mobile_Rounded"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- [[ UTILS: DRAG LOGIC FOR MOBILE/PC ]]
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            dragInput = input
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- [[ UTILS: ROUNDED CORNERS & BLUE SKY PULSE EFFECT ]]
+local function applyGlowPulseAndRound(instance, cornerRadius)
+    -- Thêm bo góc cho thực thể
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, cornerRadius or 8)
+    uiCorner.Parent = instance
+
+    -- Tạo viền sáng (Stroke)
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = Color3.fromRGB(135, 206, 250) -- Blue Sky
+    uiStroke.Thickness = 2.5
+    uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    uiStroke.Parent = instance
+
+    -- Tạo luồng hiệu ứng nhịp đập
+    task.spawn(function()
+        while instance and instance.Parent do
+            if not instance or not instance.Parent then break end
+            uiStroke.Thickness = 1.5 + (math.sin(tick() * 5) * 1.5)
+            task.wait(0.02)
+        end
+    end)
+end
+
+-- [[ MAIN UI ELEMENTS ]]
+-- 1. Nút Bật/Tắt Menu (Bo góc tròn 12px)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 60, 0, 60)
+ToggleBtn.Position = UDim2.new(0.1, 0, 0.2, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
+ToggleBtn.Text = "MENU"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 14
+ToggleBtn.Parent = ScreenGui
+makeDraggable(ToggleBtn)
+applyGlowPulseAndRound(ToggleBtn, 12)
+
+-- 2. Khung Menu Chính (Bo góc 10px)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 350, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -125)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+makeDraggable(MainFrame)
+applyGlowPulseAndRound(MainFrame, 10)
+
+-- Sự kiện ẩn hiển menu khi click nút
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- [[ TAB SYSTEM INTERFACE ]]
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, 0, 0, 40)
+TabBar.BackgroundTransparency = 1 -- Để lộ nền bo góc của khung chính
+
+local Container = Instance.new("Frame", MainFrame)
+Container.Size = UDim2.new(1, 0, 1, -40)
+Container.Position = UDim2.new(0, 0, 0, 40)
+Container.BackgroundTransparency = 1
+
+local Tabs = {
+    Main = Instance.new("Frame", Container),
+    ESP = Instance.new("Frame", Container),
+    Setting = Instance.new("Frame", Container)
+}
+
+for _, tab in pairs(Tabs) do
+    tab.Size = UDim2.new(1, 0, 1, 0)
+    tab.BackgroundTransparency = 1
+    tab.Visible = false
+end
+Tabs.Main.Visible = true
+
+-- Hàm tạo nút chuyển Tab (Cũng được bo góc riêng biệt)
+local function createTabButton(name, pos, size, targetTab)
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size = size
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(25, 30, 45)
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
+    
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do t.Visible = false end
+        targetTab.Visible = true
+    end)
+    return btn
+end
+
+-- Chia khoảng cách và kích thước nút Tab hợp lý để lộ khoảng trống bo góc
+createTabButton("MAIN", UDim2.new(0.02, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Main)
+createTabButton("ESP", UDim2.new(0.35, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.ESP)
+createTabButton("SETTING", UDim2.new(0.68, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Setting)
+
+-- [[ UI ELEMENTS CONSTRUCTION (BO GÓC NÚT + TEXTBOX CHỨC NĂNG) ]]
+
+local function createMenuButton(text, pos, parent, callback)
+    local button = Instance.new("TextButton", parent)
+    button.Size = UDim2.new(0.9, 0, 0, 35)
+    button.Position = pos
+    button.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.SourceSans
+    button.TextSize = 16
+    button.Text = text
+    
+    -- Áp dụng bo góc 6px cho nút chức năng bên trong menu
+    local corner = Instance.new("UICorner", button)
+    corner.CornerRadius = UDim.new(0, 6)
+    
+    button.MouseButton1Click:Connect(function()
+        callback(button)
+    end)
+    return button
+end
+
+-- TAB 1: MAIN
+local aimBtn = createMenuButton("Silent Aim: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.Main, function(b)
+    getgenv().Config.SilentAim = not getgenv().Config.SilentAim
+    b.Text = getgenv().Config.SilentAim and "Silent Aim: ON" or "Silent Aim: OFF"
+    b.BackgroundColor3 = getgenv().Config.SilentAim and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local teamBtn = createMenuButton("Check Team: OFF", UDim2.new(0.05, 0, 0.35, 0), Tabs.Main, function(b)
+    getgenv().Config.CheckTeam = not getgenv().Config.CheckTeam
+    b.Text = getgenv().Config.CheckTeam and "Check Team: ON" or "Check Team: OFF"
+    b.BackgroundColor3 = getgenv().Config.CheckTeam and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local rangeBtn = createMenuButton("Show Range: OFF", UDim2.new(0.05, 0, 0.6, 0), Tabs.Main, function(b)
+    getgenv().Config.ShowRange = not getgenv().Config.ShowRange
+    b.Text = getgenv().Config.ShowRange and "Show Range: ON" or "Show Range: OFF"
+    b.BackgroundColor3 = getgenv().Config.ShowRange and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 2: ESP
+local espBtn = createMenuButton("2D Box & Tracer ESP: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.ESP, function(b)
+    getgenv().Config.ESP = not getgenv().Config.ESP
+    b.Text = getgenv().Config.ESP and "ESP: ON" or "ESP: OFF"
+    b.BackgroundColor3 = getgenv().Config.ESP and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 3: SETTING
+local label = Instance.new("TextLabel", Tabs.Setting)
+label.Size = UDim2.new(0.4, 0, 0, 35)
+label.Position = UDim2.new(0.05, 0, 0.1, 0)
+label.Text = "Silent Aim Range:"
+label.TextColor3 = Color3.fromRGB(255, 255, 255)
+label.BackgroundTransparency = 1
+label.TextXAlignment = Enum.TextXAlignment.Left
+
+local rangeInput = Instance.new("TextBox", Tabs.Setting)
+rangeInput.Size = UDim2.new(0.4, 0, 0, 35)
+rangeInput.Position = UDim2.new(0.5, 0, 0.1, 0)
+rangeInput.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+rangeInput.Text = tostring(getgenv().Config.RangeValue)
+rangeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+rangeInput.Font = Enum.Font.Code
+
+-- Thêm bo góc cho TextBox nhập giá trị vùng bắn (Range)
+local inputCorner = Instance.new("UICorner", rangeInput)
+inputCorner.CornerRadius = UDim.new(0, 6)
+
+rangeInput.FocusLost:Connect(function()
+    local val = tonumber(rangeInput.Text)
+    if val then
+        getgenv().Config.RangeValue = val
+    else
+        rangeInput.Text = tostring(getgenv().Config.RangeValue)
+    end
+end)
+
+
+-- [[ CORE MECHANICAL LOGIC: BACKEND HOOKS ]]
+local function getClosestPlayer()
+    local target = nil
+    local maxDist = getgenv().Config.RangeValue
+    
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= lp and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            if getgenv().Config.CheckTeam and v.Team == lp.Team then continue end
+            
+            local screenPos, onScreen = camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local mousePos = UIS:GetMouseLocation()
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                if dist < maxDist then
+                    maxDist = dist
+                    target = v
+                end
+            end
+        end
+    end
+    return target
+end
+
+local mt = getrawmetatable(game)
+local oldIndex = mt.__index
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__index = newcclosure(function(self, key)
+    if not checkcaller() and getgenv().Config.SilentAim and tostring(self) == "Mouse" and key == "Hit" then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart.CFrame
+        end
+    end
+    return oldIndex(self, key)
+end)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    if not checkcaller() and getgenv().Config.SilentAim and (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "Raycast") then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart, target.Character.HumanoidRootPart.Position
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
+
+
+-- [[ VISUAL RENDERING: DRAWING API (ESP & RANGE) ]]
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 1.5
+fovCircle.Color = Color3.fromRGB(135, 206, 250)
+fovCircle.Filled = false
+fovCircle.Transparency = 0.6
+
+local espCache = {}
+
+local function createEspDrawings()
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Color = Color3.fromRGB(255, 0, 0)
+    box.Filled = false
+    box.Visible = false
+    
+    local line = Drawing.new("Line")
+    line.Thickness = 1
+    line.Color = Color3.fromRGB(135, 206, 250)
+    line.Visible = false
+    
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Color = Color3.fromRGB(255, 255, 255)
+    text.Visible = false
+
+    return {Box = box, Line = line, Text = text}
+end
+
+RunService.RenderStepped:Connect(function()
+    if getgenv().Config.ShowRange then
+        fovCircle.Radius = getgenv().Config.RangeValue
+        fovCircle.Position = UIS:GetMouseLocation()
+        fovCircle.Visible = true
+    else
+        fovCircle.Visible = false
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p == lp then continue end
+        if not espCache[p] then espCache[p] = createEspDrawings() end
+        
+        local drawings = espCache[p]
+        local isVisible = false
+        
+        if getgenv().Config.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            if not (getgenv().Config.CheckTeam and p.Team == lp.Team) then
+                local hrp = p.Character.HumanoidRootPart
+                local hrpPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+                
+                if onScreen then
+                    local scale = 1 / (hrpPos.Z * math.tan(math.rad(camera.FieldOfView * 0.5))) * 1000
+                    local w, h = 2.5 * scale, 4.5 * scale
+                    
+                    drawings.Box.Size = Vector2.new(w, h)
+                    drawings.Box.Position = Vector2.new(hrpPos.X - w/2, hrpPos.Y - h/2)
+                    drawings.Box.Visible = true
+                    
+                    drawings.Line.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                    drawings.Line.To = Vector2.new(hrpPos.X, hrpPos.Y + h/2)
+                    drawings.Line.Visible = true
+                    
+                    local distance = math.floor((hrp.Position - camera.CFrame.Position).Magnitude)
+                    drawings.Text.Text = p.Name .. " [" .. tostring(distance) .. "m]"
+                    drawings.Text.Position = Vector2.new(hrpPos.X, hrpPos.Y - h/2 - 18)
+                    drawings.Text.Visible = true
+                    
+                    isVisible = true
+                end
+            end
+        end
+        
+        if not isVisible then
+            drawings.Box.Visible = false
+            drawings.Line.Visible = false
+            drawings.Text.Visible = false
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    if espCache[p] then
+        espCache[p].Box:Remove()
+        espCache[p].Line:Remove()
+        espCache[p].Text:Remove()
+        espCache[p] = nil
+    end
+end)-- [[ CONFIGURATION & GLOBALS ]]
+getgenv().Config = {
+    SilentAim = false,
+    CheckTeam = false,
+    ShowRange = false,
+    RangeValue = 100,
+    ESP = false
+}
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- [[ SCREEN GUI ]]
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SkyGui_Mobile_Rounded"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- [[ UTILS: DRAG LOGIC FOR MOBILE/PC ]]
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            dragInput = input
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- [[ UTILS: ROUNDED CORNERS & BLUE SKY PULSE EFFECT ]]
+local function applyGlowPulseAndRound(instance, cornerRadius)
+    -- Thêm bo góc cho thực thể
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, cornerRadius or 8)
+    uiCorner.Parent = instance
+
+    -- Tạo viền sáng (Stroke)
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = Color3.fromRGB(135, 206, 250) -- Blue Sky
+    uiStroke.Thickness = 2.5
+    uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    uiStroke.Parent = instance
+
+    -- Tạo luồng hiệu ứng nhịp đập
+    task.spawn(function()
+        while instance and instance.Parent do
+            if not instance or not instance.Parent then break end
+            uiStroke.Thickness = 1.5 + (math.sin(tick() * 5) * 1.5)
+            task.wait(0.02)
+        end
+    end)
+end
+
+-- [[ MAIN UI ELEMENTS ]]
+-- 1. Nút Bật/Tắt Menu (Bo góc tròn 12px)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 60, 0, 60)
+ToggleBtn.Position = UDim2.new(0.1, 0, 0.2, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
+ToggleBtn.Text = "MENU"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 14
+ToggleBtn.Parent = ScreenGui
+makeDraggable(ToggleBtn)
+applyGlowPulseAndRound(ToggleBtn, 12)
+
+-- 2. Khung Menu Chính (Bo góc 10px)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 350, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -125)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+makeDraggable(MainFrame)
+applyGlowPulseAndRound(MainFrame, 10)
+
+-- Sự kiện ẩn hiển menu khi click nút
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- [[ TAB SYSTEM INTERFACE ]]
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, 0, 0, 40)
+TabBar.BackgroundTransparency = 1 -- Để lộ nền bo góc của khung chính
+
+local Container = Instance.new("Frame", MainFrame)
+Container.Size = UDim2.new(1, 0, 1, -40)
+Container.Position = UDim2.new(0, 0, 0, 40)
+Container.BackgroundTransparency = 1
+
+local Tabs = {
+    Main = Instance.new("Frame", Container),
+    ESP = Instance.new("Frame", Container),
+    Setting = Instance.new("Frame", Container)
+}
+
+for _, tab in pairs(Tabs) do
+    tab.Size = UDim2.new(1, 0, 1, 0)
+    tab.BackgroundTransparency = 1
+    tab.Visible = false
+end
+Tabs.Main.Visible = true
+
+-- Hàm tạo nút chuyển Tab (Cũng được bo góc riêng biệt)
+local function createTabButton(name, pos, size, targetTab)
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size = size
+    btn.Position = pos
+    btn.BackgroundColor3 = Color3.fromRGB(25, 30, 45)
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
+    
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        for _, t in pairs(Tabs) do t.Visible = false end
+        targetTab.Visible = true
+    end)
+    return btn
+end
+
+-- Chia khoảng cách và kích thước nút Tab hợp lý để lộ khoảng trống bo góc
+createTabButton("MAIN", UDim2.new(0.02, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Main)
+createTabButton("ESP", UDim2.new(0.35, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.ESP)
+createTabButton("SETTING", UDim2.new(0.68, 0, 0.15, 0), UDim2.new(0.3, 0, 0.7, 0), Tabs.Setting)
+
+-- [[ UI ELEMENTS CONSTRUCTION (BO GÓC NÚT + TEXTBOX CHỨC NĂNG) ]]
+
+local function createMenuButton(text, pos, parent, callback)
+    local button = Instance.new("TextButton", parent)
+    button.Size = UDim2.new(0.9, 0, 0, 35)
+    button.Position = pos
+    button.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.SourceSans
+    button.TextSize = 16
+    button.Text = text
+    
+    -- Áp dụng bo góc 6px cho nút chức năng bên trong menu
+    local corner = Instance.new("UICorner", button)
+    corner.CornerRadius = UDim.new(0, 6)
+    
+    button.MouseButton1Click:Connect(function()
+        callback(button)
+    end)
+    return button
+end
+
+-- TAB 1: MAIN
+local aimBtn = createMenuButton("Silent Aim: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.Main, function(b)
+    getgenv().Config.SilentAim = not getgenv().Config.SilentAim
+    b.Text = getgenv().Config.SilentAim and "Silent Aim: ON" or "Silent Aim: OFF"
+    b.BackgroundColor3 = getgenv().Config.SilentAim and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local teamBtn = createMenuButton("Check Team: OFF", UDim2.new(0.05, 0, 0.35, 0), Tabs.Main, function(b)
+    getgenv().Config.CheckTeam = not getgenv().Config.CheckTeam
+    b.Text = getgenv().Config.CheckTeam and "Check Team: ON" or "Check Team: OFF"
+    b.BackgroundColor3 = getgenv().Config.CheckTeam and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+local rangeBtn = createMenuButton("Show Range: OFF", UDim2.new(0.05, 0, 0.6, 0), Tabs.Main, function(b)
+    getgenv().Config.ShowRange = not getgenv().Config.ShowRange
+    b.Text = getgenv().Config.ShowRange and "Show Range: ON" or "Show Range: OFF"
+    b.BackgroundColor3 = getgenv().Config.ShowRange and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 2: ESP
+local espBtn = createMenuButton("2D Box & Tracer ESP: OFF", UDim2.new(0.05, 0, 0.1, 0), Tabs.ESP, function(b)
+    getgenv().Config.ESP = not getgenv().Config.ESP
+    b.Text = getgenv().Config.ESP and "ESP: ON" or "ESP: OFF"
+    b.BackgroundColor3 = getgenv().Config.ESP and Color3.fromRGB(0, 120, 200) or Color3.fromRGB(30, 35, 50)
+end)
+
+-- TAB 3: SETTING
+local label = Instance.new("TextLabel", Tabs.Setting)
+label.Size = UDim2.new(0.4, 0, 0, 35)
+label.Position = UDim2.new(0.05, 0, 0.1, 0)
+label.Text = "Silent Aim Range:"
+label.TextColor3 = Color3.fromRGB(255, 255, 255)
+label.BackgroundTransparency = 1
+label.TextXAlignment = Enum.TextXAlignment.Left
+
+local rangeInput = Instance.new("TextBox", Tabs.Setting)
+rangeInput.Size = UDim2.new(0.4, 0, 0, 35)
+rangeInput.Position = UDim2.new(0.5, 0, 0.1, 0)
+rangeInput.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+rangeInput.Text = tostring(getgenv().Config.RangeValue)
+rangeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+rangeInput.Font = Enum.Font.Code
+
+-- Thêm bo góc cho TextBox nhập giá trị vùng bắn (Range)
+local inputCorner = Instance.new("UICorner", rangeInput)
+inputCorner.CornerRadius = UDim.new(0, 6)
+
+rangeInput.FocusLost:Connect(function()
+    local val = tonumber(rangeInput.Text)
+    if val then
+        getgenv().Config.RangeValue = val
+    else
+        rangeInput.Text = tostring(getgenv().Config.RangeValue)
+    end
+end)
+
+
+-- [[ CORE MECHANICAL LOGIC: BACKEND HOOKS ]]
+local function getClosestPlayer()
+    local target = nil
+    local maxDist = getgenv().Config.RangeValue
+    
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= lp and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            if getgenv().Config.CheckTeam and v.Team == lp.Team then continue end
+            
+            local screenPos, onScreen = camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local mousePos = UIS:GetMouseLocation()
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                if dist < maxDist then
+                    maxDist = dist
+                    target = v
+                end
+            end
+        end
+    end
+    return target
+end
+
+local mt = getrawmetatable(game)
+local oldIndex = mt.__index
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__index = newcclosure(function(self, key)
+    if not checkcaller() and getgenv().Config.SilentAim and tostring(self) == "Mouse" and key == "Hit" then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart.CFrame
+        end
+    end
+    return oldIndex(self, key)
+end)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    if not checkcaller() and getgenv().Config.SilentAim and (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "Raycast") then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            return target.Character.HumanoidRootPart, target.Character.HumanoidRootPart.Position
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
+
+
+-- [[ VISUAL RENDERING: DRAWING API (ESP & RANGE) ]]
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 1.5
+fovCircle.Color = Color3.fromRGB(135, 206, 250)
+fovCircle.Filled = false
+fovCircle.Transparency = 0.6
+
+local espCache = {}
+
+local function createEspDrawings()
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Color = Color3.fromRGB(255, 0, 0)
+    box.Filled = false
+    box.Visible = false
+    
+    local line = Drawing.new("Line")
+    line.Thickness = 1
+    line.Color = Color3.fromRGB(135, 206, 250)
+    line.Visible = false
+    
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Color = Color3.fromRGB(255, 255, 255)
+    text.Visible = false
+
+    return {Box = box, Line = line, Text = text}
+end
+
+RunService.RenderStepped:Connect(function()
+    if getgenv().Config.ShowRange then
+        fovCircle.Radius = getgenv().Config.RangeValue
+        fovCircle.Position = UIS:GetMouseLocation()
+        fovCircle.Visible = true
+    else
+        fovCircle.Visible = false
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p == lp then continue end
+        if not espCache[p] then espCache[p] = createEspDrawings() end
+        
+        local drawings = espCache[p]
+        local isVisible = false
+        
+        if getgenv().Config.ESP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            if not (getgenv().Config.CheckTeam and p.Team == lp.Team) then
+                local hrp = p.Character.HumanoidRootPart
+                local hrpPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+                
+                if onScreen then
+                    local scale = 1 / (hrpPos.Z * math.tan(math.rad(camera.FieldOfView * 0.5))) * 1000
+                    local w, h = 2.5 * scale, 4.5 * scale
+                    
+                    drawings.Box.Size = Vector2.new(w, h)
+                    drawings.Box.Position = Vector2.new(hrpPos.X - w/2, hrpPos.Y - h/2)
+                    drawings.Box.Visible = true
+                    
+                    drawings.Line.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                    drawings.Line.To = Vector2.new(hrpPos.X, hrpPos.Y + h/2)
+                    drawings.Line.Visible = true
+                    
+                    local distance = math.floor((hrp.Position - camera.CFrame.Position).Magnitude)
+                    drawings.Text.Text = p.Name .. " [" .. tostring(distance) .. "m]"
+                    drawings.Text.Position = Vector2.new(hrpPos.X, hrpPos.Y - h/2 - 18)
+                    drawings.Text.Visible = true
+                    
+                    isVisible = true
+                end
+            end
+        end
+        
+        if not isVisible then
+            drawings.Box.Visible = false
+            drawings.Line.Visible = false
+            drawings.Text.Visible = false
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    if espCache[p] then
+        espCache[p].Box:Remove()
+        espCache[p].Line:Remove()
+        espCache[p].Text:Remove()
+        espCache[p] = nil
+    end
+end)
