@@ -2,346 +2,392 @@ local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local Debris = game:GetService("Debris")
-local StarterGui = game:GetService("StarterGui")
-local TweenService = game:GetService("TweenService")
-local ContextActionService = game:GetService("ContextActionService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 
--- ==========================================
--- TẠO NÚT MENU TRÊN MÀN HÌNH (GIỐNG ROBLOX)
--- ==========================================
+-- Định tuyến trực tiếp đến RemoteEvent nội bộ của game
+local CharacterEvents = ReplicatedStorage:FindFirstChild("CharacterEvents")
+local StruggleEvent = CharacterEvents and CharacterEvents:FindFirstChild("Struggle")
 
--- Xóa GUI cũ nếu có
-if playerGui:FindFirstChild("FlingControlPanel") then
-    playerGui.FlingControlPanel:Destroy()
-end
-
+-- ==========================================
+-- 1. TẠO GIAO DIỆN ĐIỀU KHIỂN (GUI)
+-- ==========================================
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "FlingControlPanel"
+screenGui.Name = "SystemControlPanel"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
--- ==========================================
--- NÚT MỞ MENU (Ở GÓC TRÁI MÀN HÌNH)
--- ==========================================
-
-local menuButton = Instance.new("ImageButton")
-menuButton.Size = UDim2.new(0, 50, 0, 50)
-menuButton.Position = UDim2.new(0, 10, 0, 10)
-menuButton.BackgroundColor3 = Color3.fromRGB(30, 40, 60)
-menuButton.BackgroundTransparency = 0.2
-menuButton.Image = "rbxassetid://6034818374"
-menuButton.ImageColor3 = Color3.fromRGB(255, 255, 255)
-menuButton.AutoButtonColor = true
-menuButton.Parent = screenGui
-
-local menuButtonCorner = Instance.new("UICorner")
-menuButtonCorner.CornerRadius = UDim.new(1, 0)
-menuButtonCorner.Parent = menuButton
-
-local menuStroke = Instance.new("UIStroke")
-menuStroke.Color = Color3.fromRGB(255, 255, 255)
-menuStroke.Thickness = 1
-menuStroke.Transparency = 0.3
-menuStroke.Parent = menuButton
-
--- ==========================================
--- MENU CHÍNH
--- ==========================================
-
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 280, 0, 350)
-mainFrame.Position = UDim2.new(0.5, -140, 0.4, 0)  -- Giữa màn hình
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 40)
-mainFrame.BackgroundTransparency = 0.15
+mainFrame.Size = UDim2.new(0, 220, 0, 215)
+mainFrame.Position = UDim2.new(0.5, -110, 0.4, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 mainFrame.BorderSizePixel = 0
-mainFrame.Visible = false
 mainFrame.Active = true
-mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 
 local frameCorner = Instance.new("UICorner")
-frameCorner.CornerRadius = UDim.new(0, 12)
+frameCorner.CornerRadius = UDim.new(0, 8)
 frameCorner.Parent = mainFrame
 
-local mainStroke = Instance.new("UIStroke")
-mainStroke.Color = Color3.fromRGB(0, 190, 255)
-mainStroke.Thickness = 2
-mainStroke.Transparency = 0.2
-mainStroke.Parent = mainFrame
-
--- ==========================================
--- HEADER MENU
--- ==========================================
-
-local headerFrame = Instance.new("Frame")
-headerFrame.Size = UDim2.new(1, 0, 0, 50)
-headerFrame.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
-headerFrame.BackgroundTransparency = 0.3
-headerFrame.Parent = mainFrame
-
-local headerCorner = Instance.new("UICorner")
-headerCorner.CornerRadius = UDim.new(0, 12)
-headerCorner.Parent = headerFrame
-
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(1, -50, 1, 0)
-titleLabel.Position = UDim2.new(0, 15, 0, 0)
+titleLabel.Size = UDim2.new(1, -35, 0, 35)
+titleLabel.Position = UDim2.new(0, 10, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "⚡ Fling Control ⚡"
+titleLabel.Text = "System Control [1]"
 titleLabel.Font = Enum.Font.SourceSansBold
-titleLabel.TextSize = 20
-titleLabel.TextColor3 = Color3.fromRGB(200, 240, 255)
+titleLabel.TextSize = 18
+titleLabel.TextColor3 = Color3.fromRGB(0, 120, 255)
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Parent = headerFrame
+titleLabel.Parent = mainFrame
 
 local closeButton = Instance.new("TextButton")
-closeButton.Size = UDim2.new(0, 32, 0, 32)
-closeButton.Position = UDim2.new(1, -42, 0, 9)
-closeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-closeButton.Text = "✕"
+closeButton.Size = UDim2.new(0, 25, 0, 25)
+closeButton.Position = UDim2.new(1, -30, 0, 5)
+closeButton.BackgroundColor3 = Color3.fromRGB(230, 50, 50)
+closeButton.Text = "X"
 closeButton.Font = Enum.Font.SourceSansBold
-closeButton.TextSize = 18
+closeButton.TextSize = 14
 closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeButton.Parent = headerFrame
+closeButton.Parent = mainFrame
+
 local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 8)
+closeCorner.CornerRadius = UDim.new(0, 6)
 closeCorner.Parent = closeButton
 
--- ==========================================
--- CONTENT MENU
--- ==========================================
+local toggleFlingBtn = Instance.new("TextButton")
+toggleFlingBtn.Size = UDim2.new(1, -20, 0, 35)
+toggleFlingBtn.Position = UDim2.new(0, 10, 0, 40)
+toggleFlingBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+toggleFlingBtn.Text = "Fling: ON [2]"
+toggleFlingBtn.Font = Enum.Font.SourceSansBold
+toggleFlingBtn.TextSize = 16
+toggleFlingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleFlingBtn.Parent = mainFrame
 
-local contentFrame = Instance.new("Frame")
-contentFrame.Size = UDim2.new(1, -20, 1, -65)
-contentFrame.Position = UDim2.new(0, 10, 0, 55)
-contentFrame.BackgroundTransparency = 1
-contentFrame.Parent = mainFrame
-
--- Thông báo hướng dẫn
-local infoLabel = Instance.new("TextLabel")
-infoLabel.Size = UDim2.new(1, 0, 0, 30)
-infoLabel.Position = UDim2.new(0, 0, 0, 0)
-infoLabel.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
-infoLabel.BackgroundTransparency = 0.5
-infoLabel.Text = "🖱️ Click để điều khiển chuột"
-infoLabel.Font = Enum.Font.SourceSans
-infoLabel.TextSize = 14
-infoLabel.TextColor3 = Color3.fromRGB(200, 220, 255)
-infoLabel.Parent = contentFrame
-local infoCorner = Instance.new("UICorner")
-infoCorner.CornerRadius = UDim.new(0, 6)
-infoCorner.Parent = infoLabel
-
--- Nút bật/tắt Fling
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(1, 0, 0, 45)
-toggleButton.Position = UDim2.new(0, 0, 0, 40)
-toggleButton.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-toggleButton.Text = "🔘 Fling: ON"
-toggleButton.Font = Enum.Font.SourceSansBold
-toggleButton.TextSize = 16
-toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleButton.Parent = contentFrame
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 8)
-toggleCorner.Parent = toggleButton
-
--- Ô nhập tốc độ
-local speedLabel = Instance.new("TextLabel")
-speedLabel.Size = UDim2.new(0.35, -5, 0, 35)
-speedLabel.Position = UDim2.new(0, 0, 0, 95)
-speedLabel.BackgroundTransparency = 1
-speedLabel.Text = "Tốc độ:"
-speedLabel.Font = Enum.Font.SourceSansBold
-speedLabel.TextSize = 14
-speedLabel.TextColor3 = Color3.fromRGB(180, 210, 255)
-speedLabel.TextXAlignment = Enum.TextXAlignment.Left
-speedLabel.Parent = contentFrame
+local flingCorner = Instance.new("UICorner")
+flingCorner.CornerRadius = UDim.new(0, 6)
+flingCorner.Parent = toggleFlingBtn
 
 local speedInput = Instance.new("TextBox")
-speedInput.Size = UDim2.new(0.65, -5, 0, 35)
-speedInput.Position = UDim2.new(0.35, 0, 0, 95)
-speedInput.BackgroundColor3 = Color3.fromRGB(30, 40, 60)
+speedInput.Size = UDim2.new(1, -20, 0, 35)
+speedInput.Position = UDim2.new(0, 10, 0, 80)
+speedInput.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
 speedInput.Text = "850"
-speedInput.PlaceholderText = "Nhập tốc độ"
+speedInput.PlaceholderText = "Nhập tốc độ (Max 5000)"
 speedInput.Font = Enum.Font.SourceSans
-speedInput.TextSize = 14
-speedInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-speedInput.Parent = contentFrame
-local speedCorner = Instance.new("UICorner")
-speedCorner.CornerRadius = UDim.new(0, 6)
-speedCorner.Parent = speedInput
+speedInput.TextSize = 16
+speedInput.TextColor3 = Color3.fromRGB(0, 120, 255)
+speedInput.ClearTextOnFocus = false
+speedInput.Parent = mainFrame
 
--- Nút Reset
-local resetButton = Instance.new("TextButton")
-resetButton.Size = UDim2.new(1, 0, 0, 35)
-resetButton.Position = UDim2.new(0, 0, 0, 140)
-resetButton.BackgroundColor3 = Color3.fromRGB(80, 80, 120)
-resetButton.Text = "🔄 Reset Settings"
-resetButton.Font = Enum.Font.SourceSans
-resetButton.TextSize = 14
-resetButton.TextColor3 = Color3.fromRGB(200, 220, 255)
-resetButton.Parent = contentFrame
-local resetCorner = Instance.new("UICorner")
-resetCorner.CornerRadius = UDim.new(0, 6)
-resetCorner.Parent = resetButton
+local inputCorner = Instance.new("UICorner")
+inputCorner.CornerRadius = UDim.new(0, 6)
+inputCorner.Parent = speedInput
 
--- ==========================================
--- XỬ LÝ GIẢI PHÓNG CHUỘT
--- ==========================================
+local toggleAntiGrabBtn = Instance.new("TextButton")
+toggleAntiGrabBtn.Size = UDim2.new(1, -20, 0, 35)
+toggleAntiGrabBtn.Position = UDim2.new(0, 10, 0, 120)
+toggleAntiGrabBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+toggleAntiGrabBtn.Text = "Anti-Grab: OFF [3]"
+toggleAntiGrabBtn.Font = Enum.Font.SourceSansBold
+toggleAntiGrabBtn.TextSize = 16
+toggleAntiGrabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleAntiGrabBtn.Parent = mainFrame
 
-local isMenuOpen = false
+local antiGrabCorner = Instance.new("UICorner")
+antiGrabCorner.CornerRadius = UDim.new(0, 6)
+antiGrabCorner.Parent = toggleAntiGrabBtn
 
--- Hàm toggle menu với giải phóng chuột
-local function toggleMenu()
-    isMenuOpen = not isMenuOpen
-    mainFrame.Visible = isMenuOpen
-    
-    if isMenuOpen then
-        -- Mở menu và thả chuột
-        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        UserInputService.MouseIconEnabled = true
-        
-        -- Animation mở
-        mainFrame.Size = UDim2.new(0, 0, 0, 0)
-        wait(0.05)
-        mainFrame.Size = UDim2.new(0, 280, 0, 350)
-    else
-        -- Đóng menu và khóa chuột lại
-        if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
-            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        end
-        UserInputService.MouseIconEnabled = false
-    end
-end
+-- Kéo thả di chuyển UI
+local isDragging = false
+local dragStartPos, frameStartPos
 
--- Click vào bất kỳ đâu trên menu để giữ chuột
-mainFrame.MouseEnter:Connect(function()
-    if isMenuOpen then
-        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        UserInputService.MouseIconEnabled = true
-    end
+mainFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		isDragging = true
+		dragStartPos = input.Position
+		frameStartPos = mainFrame.Position
+	end
 end)
 
--- Khi rời khỏi menu thì khóa chuột lại (tùy chọn)
-mainFrame.MouseLeave:Connect(function()
-    -- Không tự động khóa để user có thể click thoải mái
+UserInputService.InputChanged:Connect(function(input)
+	if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - dragStartPos
+		mainFrame.Position = UDim2.new(
+			frameStartPos.X.Scale, frameStartPos.X.Offset + delta.X, 
+			frameStartPos.Y.Scale, frameStartPos.Y.Offset + delta.Y
+		)
+	end
 end)
 
--- Mở menu khi click nút menu
-menuButton.MouseButton1Click:Connect(function()
-    toggleMenu()
-end)
-
--- Phím tắt: M để mở menu
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == Enum.KeyCode.M then
-        toggleMenu()
-    end
-    
-    if input.KeyCode == Enum.KeyCode.Escape and isMenuOpen then
-        toggleMenu()
-    end
-end)
-
--- Đóng menu
-closeButton.MouseButton1Click:Connect(function()
-    if isMenuOpen then toggleMenu() end
-end)
-
--- Tự động bắt sự kiện khi menu mở để giữ chuột
-UserInputService.InputBegan:Connect(function(input)
-    if isMenuOpen and input.UserInputType == Enum.UserInputType.MouseButton1 then
-        -- Giữ chuột ở trạng thái tự do khi click vào menu
-        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        UserInputService.MouseIconEnabled = true
-    end
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		isDragging = false
+	end
 end)
 
 -- ==========================================
--- LOGIC FLING
+-- 2. XỬ LÝ LOGIC FLING
 -- ==========================================
-
 local isFlingEnabled = true
 local flingSpeed = 850
-
-toggleButton.MouseButton1Click:Connect(function()
-    isFlingEnabled = not isFlingEnabled
-    toggleButton.Text = isFlingEnabled and "🔘 Fling: ON" or "🔘 Fling: OFF"
-    toggleButton.BackgroundColor3 = isFlingEnabled and Color3.fromRGB(0, 120, 255) or Color3.fromRGB(80, 80, 80)
-end)
+local bodyVelocities = {}
 
 speedInput:GetPropertyChangedSignal("Text"):Connect(function()
-    local numericText = speedInput.Text:gsub("%D", "")
-    if numericText ~= "" then
-        local value = tonumber(numericText)
-        if value and value > 0 then
-            flingSpeed = value
-            speedInput.Text = tostring(value)
-        else
-            flingSpeed = 850
-            speedInput.Text = "850"
-        end
-    else
-        flingSpeed = 850
-        speedInput.Text = "850"
-    end
+	local numericText = speedInput.Text:gsub("%D", "")
+	if numericText ~= "" then
+		local num = tonumber(numericText)
+		if num > 5000 then num = 5000 end
+		flingSpeed = num
+		speedInput.Text = tostring(num)
+	else
+		flingSpeed = 0
+	end
+	updateAllBodyVelocities()
 end)
 
-resetButton.MouseButton1Click:Connect(function()
-    isFlingEnabled = true
-    flingSpeed = 850
-    toggleButton.Text = "🔘 Fling: ON"
-    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-    speedInput.Text = "850"
-    print("✨ Settings reset to default!")
+local function toggleFling()
+	isFlingEnabled = not isFlingEnabled
+	if isFlingEnabled then
+		toggleFlingBtn.Text = "Fling: ON [2]"
+		toggleFlingBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+	else
+		toggleFlingBtn.Text = "Fling: OFF [2]"
+		toggleFlingBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+	end
+	updateAllBodyVelocities()
+end
+
+toggleFlingBtn.MouseButton1Click:Connect(toggleFling)
+
+-- Xử lý GrabParts
+local function handleGrabPart(grabPart)
+	if not grabPart then return end
+	
+	local weldConstraint = grabPart:FindFirstChild("WeldConstraint")
+	if not weldConstraint or not weldConstraint.Part1 then return end
+	
+	local targetPart = weldConstraint.Part1
+	if not targetPart then return end
+	
+	local bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+	
+	if isFlingEnabled then
+		bodyVelocity.Velocity = Workspace.CurrentCamera.CFrame.LookVector * flingSpeed
+	end
+	
+	bodyVelocity.Parent = targetPart
+	table.insert(bodyVelocities, bodyVelocity)
+	Debris:AddItem(bodyVelocity, 100)
+	
+	return bodyVelocity
+end
+
+local function setupGrabPartsListener()
+	local grabPartsFolder = Workspace:FindFirstChild("GrabParts")
+	if not grabPartsFolder then return end
+	
+	grabPartsFolder.ChildAdded:Connect(function(child)
+		if child.Name == "GrabPart" then
+			task.wait(0.1)
+			handleGrabPart(child)
+		end
+	end)
+	
+	for _, child in ipairs(grabPartsFolder:GetChildren()) do
+		if child.Name == "GrabPart" then
+			handleGrabPart(child)
+		end
+	end
+end
+
+local function watchForGrabParts()
+	local connection
+	
+	local function checkGrabParts()
+		local grabPartsFolder = Workspace:FindFirstChild("GrabParts")
+		if grabPartsFolder then
+			if connection then
+				connection:Disconnect()
+				connection = nil
+			end
+			setupGrabPartsListener()
+		end
+	end
+	
+	checkGrabParts()
+	
+	connection = Workspace.ChildAdded:Connect(function(child)
+		if child.Name == "GrabParts" then
+			checkGrabParts()
+		end
+	end)
+end
+
+watchForGrabParts()
+
+local function updateAllBodyVelocities()
+	local lookVector = Workspace.CurrentCamera.CFrame.LookVector
+	
+	for _, bv in ipairs(bodyVelocities) do
+		if bv and bv.Parent then
+			if isFlingEnabled and flingSpeed > 0 then
+				bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+				bv.Velocity = lookVector * flingSpeed
+			else
+				bv.MaxForce = Vector3.zero
+			end
+		end
+	end
+end
+
+-- ==========================================
+-- 3. CƠ CHẾ ANTI-GRAB & ANTI-ROLL (NATIVE)
+-- ==========================================
+local isAntiGrabEnabled = false
+local antiGrabLoop = nil
+
+local function executeNativeAntiGrab()
+	local char = localPlayer.Character
+	if not char then return end
+	
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	
+	if hrp and humanoid then
+		-- Chống lật nhân vật
+		hrp.RotVelocity = Vector3.new(0, hrp.RotVelocity.Y, 0)
+		
+		local _, yOrientation, _ = hrp.CFrame:ToOrientation()
+		hrp.CFrame = CFrame.new(hrp.Position) * CFrame.fromOrientation(0, yOrientation, 0)
+		
+		-- Ngăn chặn té ngã
+		local state = humanoid:GetState()
+		if state == Enum.HumanoidStateType.FallingDown or 
+		   state == Enum.HumanoidStateType.Ragdoll or 
+		   state == Enum.HumanoidStateType.Physics then
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+	end
+	
+	-- Gửi packet giải phóng khi bị tóm
+	if StruggleEvent then
+		local isHeld = localPlayer:FindFirstChild("IsHeld")
+		if isHeld and isHeld.Value == true then
+			StruggleEvent:FireServer(localPlayer)
+		end
+	end
+	
+	-- Quét liên kết vật lý
+	for _, obj in ipairs(char:GetDescendants()) do
+		if obj:IsA("WeldConstraint") or obj:IsA("Weld") then
+			local p0 = obj.Part0
+			local p1 = obj.Part1
+			if (p0 and p0.Name == "GrabPart") or (p1 and p1.Name == "GrabPart") then
+				if StruggleEvent then
+					StruggleEvent:FireServer(localPlayer)
+				end
+				break
+			end
+		end
+	end
+end
+
+local function toggleAntiGrab()
+	isAntiGrabEnabled = not isAntiGrabEnabled
+	
+	if antiGrabLoop then
+		antiGrabLoop:Disconnect()
+		antiGrabLoop = nil
+	end
+	
+	if isAntiGrabEnabled then
+		toggleAntiGrabBtn.Text = "Anti-Grab/Roll: ON [3]"
+		toggleAntiGrabBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+		
+		antiGrabLoop = RunService.RenderStepped:Connect(function()
+			executeNativeAntiGrab()
+		end)
+	else
+		toggleAntiGrabBtn.Text = "Anti-Grab/Roll: OFF [3]"
+		toggleAntiGrabBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+	end
+end
+
+toggleAntiGrabBtn.MouseButton1Click:Connect(toggleAntiGrab)
+
+-- ==========================================
+-- 4. PHÍM TẮT
+-- ==========================================
+local isMenuVisible = true
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	
+	if input.KeyCode == Enum.KeyCode.One then
+		-- Phím 1: Ẩn/Hiện menu
+		isMenuVisible = not isMenuVisible
+		mainFrame.Visible = isMenuVisible
+		
+	elseif input.KeyCode == Enum.KeyCode.Two then
+		-- Phím 2: Bật/Tắt Fling
+		toggleFling()
+		
+	elseif input.KeyCode == Enum.KeyCode.Three then
+		-- Phím 3: Bật/Tắt Anti-Grab
+		toggleAntiGrab()
+	end
 end)
 
 -- ==========================================
--- LOGIC FLING
+-- 5. DỌN DẸP KHI ĐÓNG MENU
 -- ==========================================
-
-Workspace.ChildAdded:Connect(function(child)
-    if child.Name == "GrabParts" then
-        local grabPart = child:FindFirstChild("GrabPart")
-        if not grabPart then return end
-        
-        local weldConstraint = grabPart:FindFirstChild("WeldConstraint")
-        if weldConstraint and weldConstraint.Part1 then
-            local targetPart = weldConstraint.Part1
-            
-            local bodyVelocity = Instance.new("BodyVelocity")
-            bodyVelocity.Parent = targetPart
-            bodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-            
-            local connection
-            connection = game:GetService("RunService").Heartbeat:Connect(function()
-                if not targetPart.Parent or not isFlingEnabled then
-                    if connection then connection:Disconnect() end
-                    return
-                end
-                if Workspace.CurrentCamera then
-                    local lookVector = Workspace.CurrentCamera.CFrame.LookVector
-                    bodyVelocity.Velocity = lookVector * flingSpeed
-                end
-            end)
-            
-            Debris:AddItem(bodyVelocity, 3)
-            
-            child:GetPropertyChangedSignal("Parent"):Connect(function()
-                if not child.Parent then
-                    if connection then connection:Disconnect() end
-                end
-            end)
-        end
-    end
+closeButton.MouseButton1Click:Connect(function()
+	if isAntiGrabEnabled then
+		toggleAntiGrab()
+	end
+	
+	isFlingEnabled = false
+	
+	for _, bv in ipairs(bodyVelocities) do
+		if bv then
+			bv:Destroy()
+		end
+	end
+	bodyVelocities = {}
+	
+	if antiGrabLoop then
+		antiGrabLoop:Disconnect()
+		antiGrabLoop = nil
+	end
+	
+	screenGui:Destroy()
 end)
 
-print("✅ Fling Control Panel loaded successfully!")
-print("📌 Click icon menu góc trái hoặc nhấn M để mở menu")
-print("🖱️ Khi menu mở, chuột sẽ được thả tự do để bạn click!")
+-- Xử lý khi nhân vật respawn
+local function onCharacterAdded(character)
+	for _, bv in ipairs(bodyVelocities) do
+		if bv then
+			bv:Destroy()
+		end
+	end
+	bodyVelocities = {}
+	
+	task.wait(1)
+	watchForGrabParts()
+end
+
+localPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- ==========================================
+-- 6. THÔNG BÁO KHỞI TẠO
+-- ==========================================
+print("=== System Control Panel Loaded ===")
+print("Phím 1: Ẩn/Hiện Menu")
+print("Phím 2: Bật/Tắt Fling")
+print("Phím 3: Bật/Tắt Anti-Grab/Roll")
+print("===================================")
