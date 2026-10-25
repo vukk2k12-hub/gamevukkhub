@@ -1,5 +1,5 @@
 -- ============================================================
--- AimHead vuhub (FULL FINAL - Silent ép 100% Head/Body)
+-- AimHead vuhub (FULL FINAL - IconTeamMate + Silent 100%)
 -- ============================================================
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -78,15 +78,41 @@ task.spawn(function()
     end
 end)
 
+-- ============================================================
+-- CHECK TEAM (gộp Team + TeamNum + Server + IconTeamMate DoW)
+-- ============================================================
+local function hasTeamIcon(inst)
+    local char = inst
+    if inst:IsA("Player") then
+        char = inst.Character
+    end
+    if not char then return false end
+    local ui = char:FindFirstChild("UI_AlwaysVisible")
+    if not ui then return false end
+    local icon = ui:FindFirstChild("IconTeamMate", true)
+    if icon and icon.Visible then return true end
+    return false
+end
+
 local function isSameTeam(a, b)
     if not a or not b then return false end
+
+    -- 1) Team property
     if a.Team and b.Team and a.Team == b.Team then return true end
+
+    -- 2) TeamNum attribute
     local aNum = a:GetAttribute("TeamNum")
     local bNum = b:GetAttribute("TeamNum")
     if aNum and bNum and aNum == bNum then return true end
+
+    -- 3) Server hook (TeamSelected_R)
     local aSrv = a:IsA("Player") and serverTeamMap[a.UserId] or nil
     local bSrv = b:IsA("Player") and serverTeamMap[b.UserId] or nil
     if aSrv and bSrv and aSrv == bSrv then return true end
+
+    -- 4) CÁCH CỦA DOW: IconTeamMate
+    if hasTeamIcon(a) or hasTeamIcon(b) then return true end
+
     return false
 end
 
@@ -136,11 +162,15 @@ local function setupSilentAim()
             if not char
                 or char:FindFirstChildOfClass("ForceField")
                 or (char:FindFirstChild("Humanoid") and char.Humanoid.Health <= 0)
-                or (char:FindFirstChild("UI_AlwaysVisible")
-                    and char.UI_AlwaysVisible:FindFirstChild("IconTeamMate", true)
-                    and char.UI_AlwaysVisible:FindFirstChild("IconTeamMate", true).Visible)
             then continue end
 
+            -- Check team/friend theo menu (gộp IconTeamMate)
+            local skip = false
+            if friendCheck and player:IsFriendsWith(plr.UserId) then skip = true end
+            if not skip and teamCheck and isSameTeam(player, plr) then skip = true end
+            if skip then continue end
+
+            -- CHỈ chọn đúng part theo mode, KHÔNG fallback
             local tPart
             if silentPartMode == "Body" then
                 tPart = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
@@ -616,7 +646,7 @@ local function createGUI()
         return btn
     end
 
-    makeTeamCheckButton("Check Team (Team + TeamNum + Server)", teamCheck,
+    makeTeamCheckButton("Check Team (Team + TeamNum + Server + IconTeamMate)", teamCheck,
         function(s) teamCheck = s end)
     makeTeamCheckButton("Check Friends", friendCheck,
         function(s) friendCheck = s end)
@@ -890,7 +920,6 @@ local function createGUI()
         end
 
         if aimOn then
-            -- ==== SILENT MODE: bắn tay, chỉ hiển thị trạng thái ====
             if aimPartMode == "Silent" and silentGetTarget then
                 local c = silentGetTarget(Camera.CFrame.Position)
                 if c then
@@ -901,7 +930,6 @@ local function createGUI()
                     StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
                 end
             else
-                -- ==== AIM THƯỜNG (Head/Body) ====
                 local target = getClosestTarget()
                 if target then
                     local targetPart = "Head"
