@@ -1,16 +1,25 @@
--- AimHead vuhub (updated) - adds Tab 4 "Team" with a scrolling list of team-check buttons
-local Players = game:GetService("Players")
+-- ============================================================
+-- AimHead vuhub (FULL FINAL - Cách 3 silent aim tự viết)
+-- ============================================================
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+local cloneref = cloneref or function(i) return i end
+local clonefunction = clonefunction or function(f) return f end
+local newcclosure = newcclosure or clonefunction
+
+local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local UIS = game:GetService("UserInputService")
+local Workspace  = game:GetService("Workspace")
+local UIS        = game:GetService("UserInputService")
+local RF         = game:GetService("ReplicatedFirst")
 
 local player = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
-local teamNumCheck = false
-local teamCheck = false
-local friendCheck = false
-local aimNPC = false
+-- ==== STATE ====
+local teamCheck      = false
+local friendCheck    = false
+local aimNPC         = false
 local priorityTarget = nil
 
 local espOn = false
@@ -19,20 +28,214 @@ local espDistance = 100
 
 local autoShot = false
 local lastAutoShot = 0
-local autoShotInterval = 0.12 -- seconds between auto shots
+local autoShotInterval = 0.12
+local aimRange = 0
 
-local aimRange = 0 -- 0 = infinite
+-- ==== AIM MODE ====
+local aimPartMode = "Head"   -- "Head" | "Body" | "Silent"
+local silentPartMode = "Head" -- "Head" | "Body" (chỉ silent)
+local aimOffsetY  = 0
+local INSTANT_AIM = true
 
+-- ==== STATUS BANNER ====
+local statusVisible = true
+local statusSize    = 16
+
+-- ============================================================
+-- HOOK TEAM SERVER
+-- ============================================================
+local serverTeamMap = {}
+local myServerTeam = nil
+
+local function hookTeamEvent()
+    local rs = game:GetService("ReplicatedStorage")
+    local events = rs:FindFirstChild("EventsNew")
+    if not events then return end
+    local playerFolder = events:FindFirstChild("Player")
+    if not playerFolder then return end
+    local ev = playerFolder:FindFirstChild("TeamSelected_R")
+    if not ev then return end
+
+    ev.OnClientEvent:Connect(function(plr, teamNum)
+        if typeof(plr) == "Instance" and plr:IsA("Player") then
+            serverTeamMap[plr.UserId] = teamNum
+            if plr == player then myServerTeam = teamNum end
+        end
+    end)
+end
+
+task.spawn(function()
+    for _ = 1, 20 do
+        hookTeamEvent()
+        task.wait(1)
+    end
+end)
+
+local function isSameTeam(a, b)
+    if not a or not b then return false end
+    if a.Team and b.Team and a.Team == b.Team then return true end
+    local aNum = a:GetAttribute("TeamNum")
+    local bNum = b:GetAttribute("TeamNum")
+    if aNum and bNum and aNum == bNum then return true end
+    local aSrv = a:IsA("Player") and serverTeamMap[a.UserId] or nil
+    local bSrv = b:IsA("Player") and serverTeamMap[b.UserId] or nil
+    if aSrv and bSrv and aSrv == bSrv then return true end
+    return false
+end
+
+-- ============================================================
+-- SILENT AIM (Cách 3 - tự viết, dựa trên script gốc sneeky)
+-- ============================================================
+local silentAimReady = false
+local silentFOV = 300
+
+local function setupSilentAim()
+    if silentAimReady then return true end
+    if not (hookfunction and require) then
+        warn("[SilentAim] Executor thiếu hookfunction/require")
+        return false
+    end
+
+    local ok, dmg = pcall(require, RF.src.Util.Damage)
+    if not ok then
+        warn("[SilentAim] Không require được Damage: " .. tostring(dmg))
+        return false
+    end
+
+    local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled and not UIS.MouseEnabled
+
+    local rp = RaycastParams.new()
+    rp.CollisionGroup = "shoot"
+    rp.FilterType = Enum.RaycastFilterType.Exclude
+    rp.IgnoreWater = true
+
+    local function isVisible(part, origin)
+        local char = player.Character
+        if not (char and part) then return false, nil end
+        rp.FilterDescendantsInstances = {char}
+        local dir = part.Position - origin
+        local result = Workspace:Raycast(origin, dir, rp)
+        if not result then return true, nil end
+        if result.Instance:IsDescendantOf(part.Parent) then
+            return true, result.Instance
+        end
+        return false, result.Instance
+    end
+
+    local function getTarget(origin)
+        local cPart, cDistance = nil, silentFOV
+        for _, plr in next, Players:GetPlayers() do
+            if plr == player then continue end
+            local char = plr.Character
+            if not char
+                or char:FindFirstChildOfClass("ForceField")
+                or (char:FindFirstChild("Humanoid") and char.Humanoid.Health <= 0)
+                or (char:FindFirstChild("UI_AlwaysVisible")
+                    and char.UI_AlwaysVisible:FindFirstChild("IconTeamMate", true)
+                    and char.UI_AlwaysVisible:FindFirstChild("IconTeamMate", true).Visible)
+            then continue end
+
+            -- ==== CHỌN PART THEO MODE ====
+            local tPart
+            if silentPartMode == "Body" then
+                tPart = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char.PrimaryPart
+            else
+                tPart = char:FindFirstChild("Head") or char.PrimaryPart
+            end
+            if not tPart then continue end
+
+            local pos, onScreen = Camera:WorldToViewportPoint(tPart.Position)
+            if not onScreen then continue end
+
+            local v, nTPart = isVisible(tPart, origin)
+            if not v then
+                v, nTPart = isVisible(char.PrimaryPart or char:FindFirstChild("HumanoidRootPart"), origin)
+                if not v then continue end
+            end
+            if nTPart then tPart = nTPart end
+
+            local distance = (Vector2.new(pos.X, pos.Y)
+                - (isMobile and Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2) or UIS:GetMouseLocation())).Magnitude
+            if distance < cDistance then
+                cPart = tPart
+                cDistance = distance
+            end
+        end
+        return cPart
+    end
+
+    -- Triệt recoil/spread
+    rawset(dmg, "GetYaw", function() return 0 end)
+    rawset(dmg, "GetPitch", function() return 0 end)
+
+    -- Hook CheckShoot
+    local old
+    old = clonefunction(hookfunction(rawget(dmg, "CheckShoot"), newcclosure(function(origin, plr, ...)
+        if plr and plr == player then
+            local oPos = origin.Position
+            local c = getTarget(oPos)
+            if c and c.Parent and c.Parent:FindFirstChild("Humanoid") then
+                local dir = c.Position - oPos
+                return {
+                    ["instance"] = c,
+                    ["finalPosition"] = oPos + dir * dir.Magnitude,
+                    ["normal"] = dir.Unit,
+                    ["bulletDirection"] = dir,
+                    ["headshot"] = c.Name == "Head",
+                    ["victimCha"] = c.Parent,
+                    ["victimHum"] = c.Parent.Humanoid,
+                }
+            end
+        end
+        return old(origin, plr, ...)
+    end)))
+
+    silentAimReady = true
+    print("[SilentAim] Ready — mode: " .. silentPartMode)
+    return true
+end
+
+-- ============================================================
+-- GUI
+-- ============================================================
 local function createGUI()
     if player.PlayerGui:FindFirstChild("BlueSkyAimHeadMenu") then return end
 
     local ScreenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
     ScreenGui.Name = "BlueSkyAimHeadMenu"
     ScreenGui.ResetOnSpawn = false
+    ScreenGui.DisplayOrder = 999
 
+    -- STATUS BANNER
+    local StatusFrame = Instance.new("Frame", ScreenGui)
+    StatusFrame.Size = UDim2.new(0, 260, 0, 30)
+    StatusFrame.Position = UDim2.new(0.5, -130, 0, 10)
+    StatusFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    StatusFrame.BackgroundTransparency = 0.3
+    StatusFrame.BorderSizePixel = 0
+    Instance.new("UICorner", StatusFrame).CornerRadius = UDim.new(0, 8)
+
+    local StatusText = Instance.new("TextLabel", StatusFrame)
+    StatusText.Size = UDim2.new(1, -10, 1, 0)
+    StatusText.Position = UDim2.new(0, 5, 0, 0)
+    StatusText.BackgroundTransparency = 1
+    StatusText.Text = "Aim: Chưa ngắm (Head)"
+    StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
+    StatusText.Font = Enum.Font.GothamBold
+    StatusText.TextSize = statusSize
+    StatusText.TextXAlignment = Enum.TextXAlignment.Center
+
+    local function syncStatusSize()
+        StatusText.TextSize = statusSize
+        StatusFrame.Size = UDim2.new(0, math.clamp(180 + statusSize * 6, 200, 400), 0, statusSize + 14)
+        StatusFrame.Position = UDim2.new(0.5, -StatusFrame.Size.X.Offset/2, 0, 10)
+    end
+    syncStatusSize()
+
+    -- MAIN FRAME
     local MainFrame = Instance.new("Frame", ScreenGui)
-    MainFrame.Size = UDim2.new(0,340,0,420)
-    MainFrame.Position = UDim2.new(0.5,-170,0.5,-210)
+    MainFrame.Size = UDim2.new(0,340,0,500)
+    MainFrame.Position = UDim2.new(0.5,-170,0.5,-250)
     MainFrame.BackgroundColor3 = Color3.fromRGB(135,206,250)
     MainFrame.BorderSizePixel = 0
     MainFrame.Active = true
@@ -49,249 +252,322 @@ local function createGUI()
     OpenBtn.Visible = false
     Instance.new("UICorner", OpenBtn).CornerRadius = UDim.new(1,0)
 
-    local dragging=false
-    local dragInput,dragStart,startPos
-
+    -- Drag MainFrame
+    local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
     MainFrame.InputBegan:Connect(function(input)
-        if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then
-            dragging=true
-            dragStart=input.Position
-            startPos=MainFrame.Position
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true; dragStart = input.Position; startPos = MainFrame.Position
             input.Changed:Connect(function()
-                if input.UserInputState==Enum.UserInputState.End then
-                    dragging=false
-                end
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
             end)
         end
     end)
-
     MainFrame.InputChanged:Connect(function(input)
-        if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseMovement then
-            dragInput=input
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
         end
     end)
-
     RunService.RenderStepped:Connect(function()
         if dragging and dragInput then
-            local delta=dragInput.Position-dragStart
-            MainFrame.Position=UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset+delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset+delta.Y
-            )
+            local delta = dragInput.Position - dragStart
+            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                                           startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
 
-    local draggingBtn=false
-    local dragInputBtn,dragStartBtn,startPosBtn
-
+    -- Drag OpenBtn
+    local draggingBtn, dragInputBtn, dragStartBtn, startPosBtn = false, nil, nil, nil
     OpenBtn.InputBegan:Connect(function(input)
-        if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then
-            draggingBtn=true
-            dragStartBtn=input.Position
-            startPosBtn=OpenBtn.Position
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            draggingBtn = true; dragStartBtn = input.Position; startPosBtn = OpenBtn.Position
             input.Changed:Connect(function()
-                if input.UserInputState==Enum.UserInputState.End then
-                    draggingBtn=false
-                end
+                if input.UserInputState == Enum.UserInputState.End then draggingBtn = false end
             end)
         end
     end)
-
     OpenBtn.InputChanged:Connect(function(input)
-        if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseMovement then
-            dragInputBtn=input
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInputBtn = input
         end
     end)
-
     RunService.RenderStepped:Connect(function()
         if draggingBtn and dragInputBtn then
-            local delta=dragInputBtn.Position-dragStartBtn
-            OpenBtn.Position=UDim2.new(
-                startPosBtn.X.Scale,
-                startPosBtn.X.Offset+delta.X,
-                startPosBtn.Y.Scale,
-                startPosBtn.Y.Offset+delta.Y
-            )
+            local delta = dragInputBtn.Position - dragStartBtn
+            OpenBtn.Position = UDim2.new(startPosBtn.X.Scale, startPosBtn.X.Offset + delta.X,
+                                          startPosBtn.Y.Scale, startPosBtn.Y.Offset + delta.Y)
         end
     end)
 
-    local MinBtn=Instance.new("TextButton",MainFrame)
-    MinBtn.Size=UDim2.new(0,30,0,30)
-    MinBtn.Position=UDim2.new(1,-35,0,5)
-    MinBtn.BackgroundColor3=Color3.fromRGB(100,180,255)
-    MinBtn.Text="-"
-    MinBtn.TextColor3=Color3.new(1,1,1)
-    MinBtn.Font=Enum.Font.GothamBold
-    MinBtn.TextSize=20
-    Instance.new("UICorner",MinBtn).CornerRadius=UDim.new(0,5)
+    local MinBtn = Instance.new("TextButton", MainFrame)
+    MinBtn.Size = UDim2.new(0,30,0,30)
+    MinBtn.Position = UDim2.new(1,-35,0,5)
+    MinBtn.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    MinBtn.Text = "-"
+    MinBtn.TextColor3 = Color3.new(1,1,1)
+    MinBtn.Font = Enum.Font.GothamBold
+    MinBtn.TextSize = 20
+    Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0,5)
 
-    local Title=Instance.new("TextLabel",MainFrame)
-    Title.Size=UDim2.new(1,0,0,40)
-    Title.BackgroundTransparency=1
-    Title.Text="AimHead vuhub"
-    Title.TextColor3=Color3.new(1,1,1)
-    Title.Font=Enum.Font.GothamBold
-    Title.TextSize=20
+    local Title = Instance.new("TextLabel", MainFrame)
+    Title.Size = UDim2.new(1,0,0,40)
+    Title.BackgroundTransparency = 1
+    Title.Text = "AimHead vuhub"
+    Title.TextColor3 = Color3.new(1,1,1)
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 20
 
-    local TabBar=Instance.new("Frame",MainFrame)
-    TabBar.Size=UDim2.new(1,0,0,30)
-    TabBar.Position=UDim2.new(0,0,0,40)
-    TabBar.BackgroundTransparency=1
+    local TabBar = Instance.new("Frame", MainFrame)
+    TabBar.Size = UDim2.new(1,0,0,30)
+    TabBar.Position = UDim2.new(0,0,0,40)
+    TabBar.BackgroundTransparency = 1
 
-    local MainTab=Instance.new("TextButton",TabBar)
-    MainTab.Size=UDim2.new(1/4,0,1,0)
-    MainTab.Text="Main"
-    MainTab.BackgroundTransparency=1
-    MainTab.TextColor3=Color3.new(1,1,1)
-    MainTab.Font=Enum.Font.GothamBold
-    MainTab.TextSize=16
+    local function makeTab(text, pos)
+        local t = Instance.new("TextButton", TabBar)
+        t.Size = UDim2.new(1/4,0,1,0)
+        t.Position = pos
+        t.Text = text
+        t.BackgroundTransparency = 1
+        t.TextColor3 = Color3.new(1,1,1)
+        t.Font = Enum.Font.GothamBold
+        t.TextSize = 16
+        return t
+    end
 
-    local SettingTab=Instance.new("TextButton",TabBar)
-    SettingTab.Size=UDim2.new(1/4,0,1,0)
-    SettingTab.Position=UDim2.new(1/4,0,0,0)
-    SettingTab.Text="Settings"
-    SettingTab.BackgroundTransparency=1
-    SettingTab.TextColor3=Color3.new(1,1,1)
-    SettingTab.Font=Enum.Font.GothamBold
-    SettingTab.TextSize=16
+    local MainTab     = makeTab("Main",     UDim2.new(0,0,0,0))
+    local SettingTab  = makeTab("Settings", UDim2.new(1/4,0,0,0))
+    local DistanceTab = makeTab("Distance", UDim2.new(2/4,0,0,0))
+    local TeamTab     = makeTab("Team",     UDim2.new(3/4,0,0,0))
 
-    local DistanceTab=Instance.new("TextButton",TabBar)
-    DistanceTab.Size=UDim2.new(1/4,0,1,0)
-    DistanceTab.Position=UDim2.new(2/4,0,0,0)
-    DistanceTab.Text="Distance"
-    DistanceTab.BackgroundTransparency=1
-    DistanceTab.TextColor3=Color3.new(1,1,1)
-    DistanceTab.Font=Enum.Font.GothamBold
-    DistanceTab.TextSize=16
+    local MainPage = Instance.new("Frame", MainFrame)
+    MainPage.Size = UDim2.new(1,0,1,-100)
+    MainPage.Position = UDim2.new(0,0,0,70)
+    MainPage.BackgroundTransparency = 1
 
-    local TeamTab=Instance.new("TextButton",TabBar)
-    TeamTab.Size=UDim2.new(1/4,0,1,0)
-    TeamTab.Position=UDim2.new(3/4,0,0,0)
-    TeamTab.Text="Team"
-    TeamTab.BackgroundTransparency=1
-    TeamTab.TextColor3=Color3.new(1,1,1)
-    TeamTab.Font=Enum.Font.GothamBold
-    TeamTab.TextSize=16
+    local SettingPage = Instance.new("Frame", MainFrame)
+    SettingPage.Size = MainPage.Size; SettingPage.Position = MainPage.Position
+    SettingPage.BackgroundTransparency = 1; SettingPage.Visible = false
 
-    local MainPage=Instance.new("Frame",MainFrame)
-    MainPage.Size=UDim2.new(1,0,1,-100)
-    MainPage.Position=UDim2.new(0,0,0,70)
-    MainPage.BackgroundTransparency=1
+    local DistancePage = Instance.new("Frame", MainFrame)
+    DistancePage.Size = MainPage.Size; DistancePage.Position = MainPage.Position
+    DistancePage.BackgroundTransparency = 1; DistancePage.Visible = false
 
-    local SettingPage=Instance.new("Frame",MainFrame)
-    SettingPage.Size=MainPage.Size
-    SettingPage.Position=MainPage.Position
-    SettingPage.BackgroundTransparency=1
-    SettingPage.Visible=false
+    local TeamPage = Instance.new("Frame", MainFrame)
+    TeamPage.Size = MainPage.Size; TeamPage.Position = MainPage.Position
+    TeamPage.BackgroundTransparency = 1; TeamPage.Visible = false
 
-    local DistancePage=Instance.new("Frame",MainFrame)
-    DistancePage.Size=MainPage.Size
-    DistancePage.Position=MainPage.Position
-    DistancePage.BackgroundTransparency=1
-    DistancePage.Visible=false
-
-    local TeamPage=Instance.new("Frame",MainFrame)
-    TeamPage.Size=MainPage.Size
-    TeamPage.Position=MainPage.Position
-    TeamPage.BackgroundTransparency=1
-    TeamPage.Visible=false
-
-    local function makeButton(parent,text,pos)
-        local btn=Instance.new("TextButton",parent)
-        btn.Size=UDim2.new(0.8,0,0,30)
-        btn.Position=pos
-        btn.BackgroundColor3=Color3.fromRGB(100,180,255)
-        btn.Text=text
-        btn.TextColor3=Color3.new(1,1,1)
-        btn.Font=Enum.Font.GothamBold
-        btn.TextSize=16
-        Instance.new("UICorner",btn).CornerRadius=UDim.new(0,8)
+    local function makeButton(parent, text, pos)
+        local btn = Instance.new("TextButton", parent)
+        btn.Size = UDim2.new(0.8,0,0,30)
+        btn.Position = pos
+        btn.BackgroundColor3 = Color3.fromRGB(100,180,255)
+        btn.Text = text
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 16
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
         return btn
     end
 
-    local AimHeadToggle=makeButton(MainPage,"AimHead: OFF",UDim2.new(0.1,0,0,10))
-    local CheckWallToggle=makeButton(MainPage,"Check Wall: ON",UDim2.new(0.1,0,0,50))
-    local AimNPCToggle=makeButton(MainPage,"Aim NPC: OFF",UDim2.new(0.1,0,0,90))
-    -- Team-related toggles moved to TeamPage
+    -- MAIN TAB
+    local AimHeadToggle   = makeButton(MainPage, "AimHead: OFF", UDim2.new(0.1,0,0,10))
+    local CheckWallToggle = makeButton(MainPage, "Check Wall: ON", UDim2.new(0.1,0,0,50))
+    local AimNPCToggle    = makeButton(MainPage, "Aim NPC: OFF", UDim2.new(0.1,0,0,90))
 
-    local TargetBtn=makeButton(SettingPage,"Select Target",UDim2.new(0.1,0,0,10))
-    local ESPToggle=makeButton(SettingPage,"ESP Line: OFF",UDim2.new(0.1,0,0,50))
+    -- SETTINGS TAB
+    local TargetBtn = makeButton(SettingPage, "Select Target", UDim2.new(0.1,0,0,10))
+    local ESPToggle = makeButton(SettingPage, "ESP Line: OFF", UDim2.new(0.1,0,0,50))
 
-    local FOVLabel=Instance.new("TextLabel",SettingPage)
-    FOVLabel.Size=UDim2.new(0.8,0,0,30)
-    FOVLabel.Position=UDim2.new(0.1,0,0,90)
-    FOVLabel.BackgroundTransparency=1
-    FOVLabel.Text="AimHead FOV:"
-    FOVLabel.TextColor3=Color3.new(1,1,1)
-    FOVLabel.Font=Enum.Font.GothamBold
-    FOVLabel.TextSize=16
+    local AimModeLabel = Instance.new("TextLabel", SettingPage)
+    AimModeLabel.Size = UDim2.new(0.8,0,0,20)
+    AimModeLabel.Position = UDim2.new(0.1,0,0,90)
+    AimModeLabel.BackgroundTransparency = 1
+    AimModeLabel.Text = "Aim Part:"
+    AimModeLabel.TextColor3 = Color3.new(1,1,1)
+    AimModeLabel.Font = Enum.Font.GothamBold
+    AimModeLabel.TextSize = 14
+    AimModeLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-    local FOVBox=Instance.new("TextBox",SettingPage)
-    FOVBox.Size=UDim2.new(0.8,0,0,30)
-    FOVBox.Position=UDim2.new(0.1,0,0,130)
-    FOVBox.BackgroundColor3=Color3.fromRGB(100,180,255)
-    FOVBox.Text="100"
-    FOVBox.TextColor3=Color3.new(1,1,1)
-    FOVBox.Font=Enum.Font.GothamBold
-    FOVBox.TextSize=16
-    Instance.new("UICorner",FOVBox)
+    local AimModeBtn = makeButton(SettingPage, "Aim Part: Head", UDim2.new(0.1,0,0,110))
 
-    local ESPDistLabel=Instance.new("TextLabel",SettingPage)
-    ESPDistLabel.Size=UDim2.new(0.8,0,0,30)
-    ESPDistLabel.Position=UDim2.new(0.1,0,0,170)
-    ESPDistLabel.BackgroundTransparency=1
-    ESPDistLabel.Text="Enemy ESP Distance:"
-    ESPDistLabel.TextColor3=Color3.new(1,1,1)
-    ESPDistLabel.Font=Enum.Font.GothamBold
-    ESPDistLabel.TextSize=16
+    -- OFFSET Y (chỉ hiện khi Head)
+    local OffsetLabel = Instance.new("TextLabel", SettingPage)
+    OffsetLabel.Size = UDim2.new(0.8,0,0,20)
+    OffsetLabel.Position = UDim2.new(0.1,0,0,146)
+    OffsetLabel.BackgroundTransparency = 1
+    OffsetLabel.Text = "Offset Y (0=đầu, 0.5=lố, -0.5=thấp):"
+    OffsetLabel.TextColor3 = Color3.new(1,1,1)
+    OffsetLabel.Font = Enum.Font.GothamBold
+    OffsetLabel.TextSize = 12
+    OffsetLabel.TextXAlignment = Enum.TextXAlignment.Left
+    OffsetLabel.Visible = true
 
-    local ESPDistBox=Instance.new("TextBox",SettingPage)
-    ESPDistBox.Size=UDim2.new(0.8,0,0,30)
-    ESPDistBox.Position=UDim2.new(0.1,0,0,210)
-    ESPDistBox.BackgroundColor3=Color3.fromRGB(100,180,255)
-    ESPDistBox.Text="100"
-    ESPDistBox.TextColor3=Color3.new(1,1,1)
-    ESPDistBox.Font=Enum.Font.GothamBold
-    ESPDistBox.TextSize=16
-    Instance.new("UICorner",ESPDistBox)
+    local OffsetBox = Instance.new("TextBox", SettingPage)
+    OffsetBox.Size = UDim2.new(0.8,0,0,28)
+    OffsetBox.Position = UDim2.new(0.1,0,0,168)
+    OffsetBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    OffsetBox.Text = "0"
+    OffsetBox.TextColor3 = Color3.new(1,1,1)
+    OffsetBox.Font = Enum.Font.GothamBold
+    OffsetBox.TextSize = 16
+    OffsetBox.Visible = true
+    Instance.new("UICorner", OffsetBox).CornerRadius = UDim.new(0,8)
+    OffsetBox.FocusLost:Connect(function()
+        aimOffsetY = tonumber(OffsetBox.Text) or 0
+    end)
 
-    -- Distance tab contents: Aim Distance + Auto Fire button
-    local DistanceLabel=Instance.new("TextLabel",DistancePage)
-    DistanceLabel.Size=UDim2.new(0.8,0,0,30)
-    DistanceLabel.Position=UDim2.new(0.1,0,0,20)
-    DistanceLabel.BackgroundTransparency=1
-    DistanceLabel.Text="Aim Distance (0 = infinite):"
-    DistanceLabel.TextColor3=Color3.new(1,1,1)
-    DistanceLabel.Font=Enum.Font.GothamBold
-    DistanceLabel.TextSize=16
+    -- SILENT PART (chỉ hiện khi Silent)
+    local SilentPartLabel = Instance.new("TextLabel", SettingPage)
+    SilentPartLabel.Size = UDim2.new(0.8,0,0,20)
+    SilentPartLabel.Position = UDim2.new(0.1,0,0,146)
+    SilentPartLabel.BackgroundTransparency = 1
+    SilentPartLabel.Text = "Silent Aim Part:"
+    SilentPartLabel.TextColor3 = Color3.new(1,1,1)
+    SilentPartLabel.Font = Enum.Font.GothamBold
+    SilentPartLabel.TextSize = 14
+    SilentPartLabel.TextXAlignment = Enum.TextXAlignment.Left
+    SilentPartLabel.Visible = false
 
-    local DistanceBox=Instance.new("TextBox",DistancePage)
-    DistanceBox.Size=UDim2.new(0.8,0,0,30)
-    DistanceBox.Position=UDim2.new(0.1,0,0,60)
-    DistanceBox.BackgroundColor3=Color3.fromRGB(100,180,255)
-    DistanceBox.Text="0"
-    DistanceBox.TextColor3=Color3.new(1,1,1)
-    DistanceBox.Font=Enum.Font.GothamBold
-    DistanceBox.TextSize=16
-    Instance.new("UICorner",DistanceBox)
+    local SilentPartBtn = makeButton(SettingPage, "Silent Part: Head", UDim2.new(0.1,0,0,168))
+    SilentPartBtn.Visible = false
 
-    local AutoFireBtn=makeButton(DistancePage,"Auto Fire: OFF",UDim2.new(0.1,0,0,110))
-    -- AutoFireBtn toggles autoShot
+    SilentPartBtn.MouseButton1Click:Connect(function()
+        if silentPartMode == "Head" then silentPartMode = "Body"
+        else silentPartMode = "Head" end
+        SilentPartBtn.Text = "Silent Part: " .. silentPartMode
+    end)
 
-    -- Team tab: scrolling list of check types
+    local function refreshAimPartUI()
+        if aimPartMode == "Head" then
+            OffsetLabel.Visible = true; OffsetBox.Visible = true
+            SilentPartLabel.Visible = false; SilentPartBtn.Visible = false
+        elseif aimPartMode == "Body" then
+            OffsetLabel.Visible = false; OffsetBox.Visible = false
+            SilentPartLabel.Visible = false; SilentPartBtn.Visible = false
+        else
+            OffsetLabel.Visible = false; OffsetBox.Visible = false
+            SilentPartLabel.Visible = true; SilentPartBtn.Visible = true
+        end
+    end
+
+    AimModeBtn.MouseButton1Click:Connect(function()
+        if aimPartMode == "Head" then aimPartMode = "Body"
+        elseif aimPartMode == "Body" then aimPartMode = "Silent"
+        else aimPartMode = "Head" end
+        AimModeBtn.Text = "Aim Part: " .. aimPartMode
+        refreshAimPartUI()
+        if aimPartMode == "Silent" then setupSilentAim() end
+    end)
+
+    refreshAimPartUI()
+
+    -- FOV
+    local FOVLabel = Instance.new("TextLabel", SettingPage)
+    FOVLabel.Size = UDim2.new(0.8,0,0,20)
+    FOVLabel.Position = UDim2.new(0.1,0,0,202)
+    FOVLabel.BackgroundTransparency = 1
+    FOVLabel.Text = "AimHead FOV:"
+    FOVLabel.TextColor3 = Color3.new(1,1,1)
+    FOVLabel.Font = Enum.Font.GothamBold
+    FOVLabel.TextSize = 14
+    FOVLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local FOVBox = Instance.new("TextBox", SettingPage)
+    FOVBox.Size = UDim2.new(0.8,0,0,28)
+    FOVBox.Position = UDim2.new(0.1,0,0,224)
+    FOVBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    FOVBox.Text = "100"
+    FOVBox.TextColor3 = Color3.new(1,1,1)
+    FOVBox.Font = Enum.Font.GothamBold
+    FOVBox.TextSize = 16
+    Instance.new("UICorner", FOVBox).CornerRadius = UDim.new(0,8)
+
+    local ESPDistLabel = Instance.new("TextLabel", SettingPage)
+    ESPDistLabel.Size = UDim2.new(0.8,0,0,20)
+    ESPDistLabel.Position = UDim2.new(0.1,0,0,258)
+    ESPDistLabel.BackgroundTransparency = 1
+    ESPDistLabel.Text = "Enemy ESP Distance:"
+    ESPDistLabel.TextColor3 = Color3.new(1,1,1)
+    ESPDistLabel.Font = Enum.Font.GothamBold
+    ESPDistLabel.TextSize = 14
+    ESPDistLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local ESPDistBox = Instance.new("TextBox", SettingPage)
+    ESPDistBox.Size = UDim2.new(0.8,0,0,28)
+    ESPDistBox.Position = UDim2.new(0.1,0,0,280)
+    ESPDistBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    ESPDistBox.Text = "100"
+    ESPDistBox.TextColor3 = Color3.new(1,1,1)
+    ESPDistBox.Font = Enum.Font.GothamBold
+    ESPDistBox.TextSize = 16
+    Instance.new("UICorner", ESPDistBox).CornerRadius = UDim.new(0,8)
+
+    -- DISTANCE TAB
+    local DistanceLabel = Instance.new("TextLabel", DistancePage)
+    DistanceLabel.Size = UDim2.new(0.8,0,0,30)
+    DistanceLabel.Position = UDim2.new(0.1,0,0,20)
+    DistanceLabel.BackgroundTransparency = 1
+    DistanceLabel.Text = "Aim Distance (0 = infinite):"
+    DistanceLabel.TextColor3 = Color3.new(1,1,1)
+    DistanceLabel.Font = Enum.Font.GothamBold
+    DistanceLabel.TextSize = 16
+
+    local DistanceBox = Instance.new("TextBox", DistancePage)
+    DistanceBox.Size = UDim2.new(0.8,0,0,30)
+    DistanceBox.Position = UDim2.new(0.1,0,0,60)
+    DistanceBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    DistanceBox.Text = "0"
+    DistanceBox.TextColor3 = Color3.new(1,1,1)
+    DistanceBox.Font = Enum.Font.GothamBold
+    DistanceBox.TextSize = 16
+    Instance.new("UICorner", DistanceBox).CornerRadius = UDim.new(0,8)
+
+    local AutoFireBtn = makeButton(DistancePage, "Auto Fire: OFF", UDim2.new(0.1,0,0,110))
+
+    -- STATUS BANNER TOGGLE
+    local StatusToggleBtn = makeButton(DistancePage, "Status Banner: ON", UDim2.new(0.1,0,0,150))
+
+    local StatusSizeLabel = Instance.new("TextLabel", DistancePage)
+    StatusSizeLabel.Size = UDim2.new(0.8,0,0,20)
+    StatusSizeLabel.Position = UDim2.new(0.1,0,0,190)
+    StatusSizeLabel.BackgroundTransparency = 1
+    StatusSizeLabel.Text = "Status Banner Size:"
+    StatusSizeLabel.TextColor3 = Color3.new(1,1,1)
+    StatusSizeLabel.Font = Enum.Font.GothamBold
+    StatusSizeLabel.TextSize = 14
+    StatusSizeLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local StatusSizeBox = Instance.new("TextBox", DistancePage)
+    StatusSizeBox.Size = UDim2.new(0.8,0,0,28)
+    StatusSizeBox.Position = UDim2.new(0.1,0,0,212)
+    StatusSizeBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    StatusSizeBox.Text = "16"
+    StatusSizeBox.TextColor3 = Color3.new(1,1,1)
+    StatusSizeBox.Font = Enum.Font.GothamBold
+    StatusSizeBox.TextSize = 16
+    Instance.new("UICorner", StatusSizeBox).CornerRadius = UDim.new(0,8)
+    StatusSizeBox.FocusLost:Connect(function()
+        statusSize = tonumber(StatusSizeBox.Text) or 16
+        syncStatusSize()
+    end)
+
+    StatusToggleBtn.MouseButton1Click:Connect(function()
+        statusVisible = not statusVisible
+        StatusToggleBtn.Text = "Status Banner: " .. (statusVisible and "ON" or "OFF")
+        StatusFrame.Visible = statusVisible
+    end)
+
+    -- TEAM TAB
     local TeamLabel = Instance.new("TextLabel", TeamPage)
     TeamLabel.Size = UDim2.new(0.8,0,0,24)
     TeamLabel.Position = UDim2.new(0.1,0,0,8)
     TeamLabel.BackgroundTransparency = 1
-    TeamLabel.Text = "Team Checks (each button is one type):"
+    TeamLabel.Text = "Team Checks:"
     TeamLabel.TextColor3 = Color3.new(1,1,1)
     TeamLabel.Font = Enum.Font.GothamBold
     TeamLabel.TextSize = 14
 
     local TeamScroll = Instance.new("ScrollingFrame", TeamPage)
-    TeamScroll.Size = UDim2.new(0.8,0,0,260)
+    TeamScroll.Size = UDim2.new(0.8,0,0,300)
     TeamScroll.Position = UDim2.new(0.1,0,0,40)
     TeamScroll.BackgroundTransparency = 0.9
     TeamScroll.CanvasSize = UDim2.new(0,0,0,0)
@@ -303,14 +579,14 @@ local function createGUI()
     teamListLayout.SortOrder = Enum.SortOrder.LayoutOrder
     teamListLayout.Padding = UDim.new(0,6)
 
-    -- helper to update canvas size (keeps scroll working with many buttons)
     local function updateTeamCanvas()
         TeamScroll.CanvasSize = UDim2.new(0,0,0,teamListLayout.AbsoluteContentSize.Y + 12)
     end
     teamListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateTeamCanvas)
 
-    -- function to create a team-check button inside the scroll
+    local teamBtnCounter = 0
     local function makeTeamCheckButton(text, initialState, onToggle)
+        teamBtnCounter = teamBtnCounter + 1
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(1, -10, 0, 30)
         btn.BackgroundColor3 = Color3.fromRGB(100,180,255)
@@ -318,92 +594,68 @@ local function createGUI()
         btn.Font = Enum.Font.GothamBold
         btn.TextSize = 14
         btn.Text = text .. ": " .. (initialState and "ON" or "OFF")
-        btn.LayoutOrder = #TeamScroll:GetChildren()
+        btn.LayoutOrder = teamBtnCounter
         btn.Parent = TeamScroll
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
 
         btn.MouseButton1Click:Connect(function()
-            local newState = not initialState
-            initialState = newState
+            initialState = not initialState
             btn.Text = text .. ": " .. (initialState and "ON" or "OFF")
-            if onToggle then
-                onToggle(initialState)
-            end
+            if onToggle then onToggle(initialState) end
         end)
 
         updateTeamCanvas()
         return btn
     end
 
-    -- create team-check buttons (each button = one type of check)
-    makeTeamCheckButton("Check Team (by Team property)", teamCheck, function(state) teamCheck = state end)
-    makeTeamCheckButton("Check Friends", friendCheck, function(state) friendCheck = state end)
-    makeTeamCheckButton("Check TeamNum (by attribute)", teamNumCheck, function(state) teamNumCheck = state end)
-    -- you can add more check types here later
+    makeTeamCheckButton("Check Team (Team + TeamNum + Server)", teamCheck,
+        function(s) teamCheck = s end)
+    makeTeamCheckButton("Check Friends", friendCheck,
+        function(s) friendCheck = s end)
 
-    local TargetFrame=Instance.new("Frame",ScreenGui)
-    TargetFrame.Size=UDim2.new(0,220,0,260)
-    TargetFrame.Position=UDim2.new(0.5,170,0.5,-130)
-    TargetFrame.BackgroundColor3=Color3.fromRGB(135,206,250)
-    TargetFrame.Visible=false
-    Instance.new("UICorner",TargetFrame)
+    -- TARGET FRAME
+    local TargetFrame = Instance.new("Frame", ScreenGui)
+    TargetFrame.Size = UDim2.new(0,220,0,260)
+    TargetFrame.Position = UDim2.new(0.5,170,0.5,-130)
+    TargetFrame.BackgroundColor3 = Color3.fromRGB(135,206,250)
+    TargetFrame.Visible = false
+    Instance.new("UICorner", TargetFrame).CornerRadius = UDim.new(0,10)
 
-    local ResetBtn=Instance.new("TextButton",TargetFrame)
-    ResetBtn.Size=UDim2.new(1,0,0,30)
-    ResetBtn.Text="Reset Target"
-    ResetBtn.BackgroundColor3=Color3.fromRGB(100,180,255)
+    local ResetBtn = Instance.new("TextButton", TargetFrame)
+    ResetBtn.Size = UDim2.new(1,0,0,30)
+    ResetBtn.Text = "Reset Target"
+    ResetBtn.BackgroundColor3 = Color3.fromRGB(100,180,255)
 
-    local aimOn,wallCheck=false,false
+    local aimOn, wallCheck = false, false
 
-    local FOVCircle=Drawing.new("Circle")
-    FOVCircle.Visible=false
-    FOVCircle.Color=Color3.fromRGB(135,206,250)
-    FOVCircle.Thickness=2
-    FOVCircle.NumSides=100
-    FOVCircle.Filled=false
+    local FOVCircle = Drawing.new("Circle")
+    FOVCircle.Visible = false
+    FOVCircle.Color = Color3.fromRGB(135,206,250)
+    FOVCircle.Thickness = 2
+    FOVCircle.NumSides = 100
+    FOVCircle.Filled = false
 
     MinBtn.MouseButton1Click:Connect(function()
-        MainFrame.Visible=false
-        OpenBtn.Visible=true
+        MainFrame.Visible = false; OpenBtn.Visible = true
     end)
-
     OpenBtn.MouseButton1Click:Connect(function()
-        MainFrame.Visible=true
-        OpenBtn.Visible=false
+        MainFrame.Visible = true; OpenBtn.Visible = false
     end)
 
-    MainTab.MouseButton1Click:Connect(function()
-        MainPage.Visible=true
-        SettingPage.Visible=false
-        DistancePage.Visible=false
-        TeamPage.Visible=false
-    end)
-
-    SettingTab.MouseButton1Click:Connect(function()
-        MainPage.Visible=false
-        SettingPage.Visible=true
-        DistancePage.Visible=false
-        TeamPage.Visible=false
-    end)
-
-    DistanceTab.MouseButton1Click:Connect(function()
-        MainPage.Visible=false
-        SettingPage.Visible=false
-        DistancePage.Visible=true
-        TeamPage.Visible=false
-    end)
-
-    TeamTab.MouseButton1Click:Connect(function()
-        MainPage.Visible=false
-        SettingPage.Visible=false
-        DistancePage.Visible=false
-        TeamPage.Visible=true
-    end)
+    local function showPage(page)
+        MainPage.Visible = false; SettingPage.Visible = false
+        DistancePage.Visible = false; TeamPage.Visible = false
+        page.Visible = true
+    end
+    MainTab.MouseButton1Click:Connect(function() showPage(MainPage) end)
+    SettingTab.MouseButton1Click:Connect(function() showPage(SettingPage) end)
+    DistanceTab.MouseButton1Click:Connect(function() showPage(DistancePage) end)
+    TeamTab.MouseButton1Click:Connect(function() showPage(TeamPage) end)
 
     AimHeadToggle.MouseButton1Click:Connect(function()
-        aimOn=not aimOn
-        AimHeadToggle.Text="AimHead: "..(aimOn and "ON" or "OFF")
-        FOVCircle.Visible=aimOn
+        aimOn = not aimOn
+        AimHeadToggle.Text = "AimHead: " .. (aimOn and "ON" or "OFF")
+        FOVCircle.Visible = aimOn
         if not aimOn then
             autoShot = false
             AutoFireBtn.Text = "Auto Fire: OFF"
@@ -411,158 +663,144 @@ local function createGUI()
     end)
 
     CheckWallToggle.MouseButton1Click:Connect(function()
-        wallCheck=not wallCheck
-        CheckWallToggle.Text="Check Wall: "..(wallCheck and "ON" or "OFF")
+        wallCheck = not wallCheck
+        CheckWallToggle.Text = "Check Wall: " .. (wallCheck and "ON" or "OFF")
     end)
 
     AimNPCToggle.MouseButton1Click:Connect(function()
-        aimNPC=not aimNPC
-        AimNPCToggle.Text="Aim NPC: "..(aimNPC and "ON" or "OFF")
+        aimNPC = not aimNPC
+        AimNPCToggle.Text = "Aim NPC: " .. (aimNPC and "ON" or "OFF")
     end)
 
     AutoFireBtn.MouseButton1Click:Connect(function()
         autoShot = not autoShot
-        AutoFireBtn.Text = "Auto Fire: "..(autoShot and "ON" or "OFF")
+        AutoFireBtn.Text = "Auto Fire: " .. (autoShot and "ON" or "OFF")
     end)
 
     ESPToggle.MouseButton1Click:Connect(function()
-        espOn=not espOn
-        ESPToggle.Text="ESP Line: "..(espOn and "ON" or "OFF")
+        espOn = not espOn
+        ESPToggle.Text = "ESP Line: " .. (espOn and "ON" or "OFF")
         if not espOn then
-            for _,v in pairs(espLines) do
-                v:Remove()
-            end
-            espLines={}
+            for _, v in pairs(espLines) do pcall(function() v:Destroy() end) end
+            espLines = {}
         end
     end)
 
     TargetBtn.MouseButton1Click:Connect(function()
-        TargetFrame.Visible=not TargetFrame.Visible
+        TargetFrame.Visible = not TargetFrame.Visible
     end)
-
     ResetBtn.MouseButton1Click:Connect(function()
-        priorityTarget=nil
+        priorityTarget = nil
     end)
 
     local function updatePlayerList()
-        for _,v in pairs(TargetFrame:GetChildren()) do
-            if v:IsA("TextButton") and v~=ResetBtn then
-                v:Destroy()
-            end
+        for _, v in pairs(TargetFrame:GetChildren()) do
+            if v:IsA("TextButton") and v ~= ResetBtn then v:Destroy() end
         end
-
-        local y=35
-        for _,plr in pairs(Players:GetPlayers()) do
-            if plr~=player then
-                local btn=Instance.new("TextButton",TargetFrame)
-                btn.Size=UDim2.new(1,0,0,25)
-                btn.Position=UDim2.new(0,0,0,y)
-                y=y+25
-                btn.Text=plr.Name
-                btn.BackgroundColor3=Color3.fromRGB(100,180,255)
-
+        local y = 35
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= player then
+                local btn = Instance.new("TextButton", TargetFrame)
+                btn.Size = UDim2.new(1,0,0,25)
+                btn.Position = UDim2.new(0,0,0,y)
+                y = y + 25
+                btn.Text = plr.Name
+                btn.BackgroundColor3 = Color3.fromRGB(100,180,255)
                 btn.MouseButton1Click:Connect(function()
-                    priorityTarget=plr
+                    priorityTarget = plr
                 end)
             end
         end
     end
 
     Players.PlayerAdded:Connect(updatePlayerList)
-
     Players.PlayerRemoving:Connect(function(plr)
         if espLines[plr] then
-            espLines[plr]:Remove()
-            espLines[plr]=nil
+            pcall(function() espLines[plr]:Destroy() end)
+            espLines[plr] = nil
         end
         updatePlayerList()
     end)
-
     updatePlayerList()
+
+    -- ============================================================
+    -- CHECK WALL
+    -- ============================================================
+    local function buildIgnoreList(targetHead)
+        local ignore = {}
+        if player.Character then table.insert(ignore, player.Character) end
+        if targetHead and targetHead.Parent then table.insert(ignore, targetHead.Parent) end
+        return ignore
+    end
 
     local function canSee(targetHead)
         if not wallCheck then return true end
-        local rayParams=RaycastParams.new()
-        rayParams.FilterDescendantsInstances={player.Character}
-        rayParams.FilterType=Enum.RaycastFilterType.Blacklist
+        if not targetHead then return false end
 
-        local ray=Workspace:Raycast(
-            Camera.CFrame.Position,
-            targetHead.Position-Camera.CFrame.Position,
-            rayParams
-        )
+        local origin = Camera.CFrame.Position
+        local dir = targetHead.Position - origin
+        local distance = dir.Magnitude
+        if distance <= 0 then return true end
+        dir = dir.Unit
 
-        if ray and ray.Instance and not ray.Instance:IsDescendantOf(targetHead.Parent) then
-            return false
-        end
-        return true
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+        rayParams.FilterDescendantsInstances = buildIgnoreList(targetHead)
+
+        local ray = Workspace:Raycast(origin, dir * distance, rayParams)
+        if not ray or not ray.Instance then return true end
+
+        local hit = ray.Instance
+        if targetHead.Parent and hit:IsDescendantOf(targetHead.Parent) then return true end
+        if hit:IsA("BasePart") or hit:IsA("Terrain") then return false end
+        return false
     end
 
     local function withinAimRange(head)
         if not player.Character or not player.Character:FindFirstChild("Head") then
             return false
         end
-        local pHead = player.Character.Head
-        local d = (pHead.Position - head.Position).Magnitude
-        if aimRange == 0 then
-            return true
-        end
+        local d = (player.Character.Head.Position - head.Position).Magnitude
+        if aimRange == 0 then return true end
         return d <= aimRange
     end
 
     local function getClosestTarget()
-
-        local center=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
-        local fov=tonumber(FOVBox.Text) or 100
-
-        -- refresh aimRange from DistanceBox (tab 3)
+        local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+        local fov = tonumber(FOVBox.Text) or 100
         aimRange = tonumber(DistanceBox.Text) or 0
 
         if priorityTarget and priorityTarget.Character then
-            local head=priorityTarget.Character:FindFirstChild("Head")
-            local hum=priorityTarget.Character:FindFirstChildOfClass("Humanoid")
-            if head and hum and hum.Health>0 then
-                local pos,onScreen=Camera:WorldToViewportPoint(head.Position)
+            local head = priorityTarget.Character:FindFirstChild("Head")
+            local hum = priorityTarget.Character:FindFirstChildOfClass("Humanoid")
+            if head and hum and hum.Health > 0 then
+                local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
                 if onScreen then
-                    local dist2d=(Vector2.new(pos.X,pos.Y)-center).Magnitude
-                    if dist2d<=fov and canSee(head) and withinAimRange(head) then
+                    local dist2d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                    if dist2d <= fov and canSee(head) and withinAimRange(head) then
                         return priorityTarget
                     end
                 end
             end
         end
 
-        local closest=nil
-        local shortest=math.huge
+        local closest, shortest = nil, math.huge
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= player and plr.Character and plr.Character:FindFirstChild("Head") then
+                local humanoid = plr.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    local skip = false
+                    if friendCheck and player:IsFriendsWith(plr.UserId) then skip = true end
+                    if not skip and teamCheck and isSameTeam(player, plr) then skip = true end
 
-        for _,plr in pairs(Players:GetPlayers()) do
-            if plr~=player and plr.Character and plr.Character:FindFirstChild("Head") then
-
-                local humanoid=plr.Character:FindFirstChildOfClass("Humanoid")
-
-                if humanoid and humanoid.Health>0 then
-
-                    -- team/friend checks now driven by variables in Team tab
-                    if (not friendCheck or not player:IsFriendsWith(plr.UserId)) and
-                       (not teamCheck or plr.Team~=player.Team) then
-
-                        if teamNumCheck then
-                            local a = plr:GetAttribute("TeamNum")
-                            local b = player:GetAttribute("TeamNum")
-                            if a and b and a == b then
-                                continue
-                            end
-                        end
-
-                        local head=plr.Character.Head
-                        local screenPos,onScreen=Camera:WorldToViewportPoint(head.Position)
-
+                    if not skip then
+                        local head = plr.Character.Head
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
                         if onScreen then
-                            local dist2d=(Vector2.new(screenPos.X,screenPos.Y)-center).Magnitude
-
-                            if dist2d<=fov and dist2d<shortest and canSee(head) and withinAimRange(head) then
-                                shortest=dist2d
-                                closest=plr
+                            local dist2d = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                            if dist2d <= fov and dist2d < shortest and canSee(head) and withinAimRange(head) then
+                                shortest = dist2d
+                                closest = plr
                             end
                         end
                     end
@@ -570,92 +808,71 @@ local function createGUI()
             end
         end
 
-        if closest then
-            return closest
-        end
+        if closest then return closest end
 
         if aimNPC then
-            local closestNPC=nil
-            local shortestNPC=math.huge
-
-            for _,npc in pairs(Workspace:GetDescendants()) do
+            local closestNPC, shortestNPC = nil, math.huge
+            for _, npc in pairs(Workspace:GetDescendants()) do
                 if npc:IsA("Model") and npc:FindFirstChild("Humanoid") and npc:FindFirstChild("Head") then
-                    if Players:GetPlayerFromCharacter(npc)==nil then
-
-                        local hum=npc.Humanoid
-                        if hum.Health>0 then
-
-                            if teamNumCheck then
-                                local npcNum = npc:GetAttribute("TeamNum")
-                                local playerNum = player:GetAttribute("TeamNum")
-                                if npcNum and playerNum and npcNum == playerNum then
-                                    continue
-                                end
-                            end
-
-                            local head=npc.Head
-                            local screenPos,onScreen=Camera:WorldToViewportPoint(head.Position)
-
-                            if onScreen then
-                                local dist=(Vector2.new(screenPos.X,screenPos.Y)-center).Magnitude
-
-                                if dist<=fov and dist<shortestNPC and canSee(head) and withinAimRange(head) then
-                                    shortestNPC=dist
-                                    closestNPC=npc
+                    if Players:GetPlayerFromCharacter(npc) == nil then
+                        local hum = npc.Humanoid
+                        if hum.Health > 0 then
+                            local skip = false
+                            if teamCheck and isSameTeam(player, npc) then skip = true end
+                            if not skip then
+                                local head = npc.Head
+                                local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                                if onScreen then
+                                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                                    if dist <= fov and dist < shortestNPC and canSee(head) and withinAimRange(head) then
+                                        shortestNPC = dist
+                                        closestNPC = npc
+                                    end
                                 end
                             end
                         end
                     end
                 end
             end
-
             return closestNPC
         end
 
         return nil
     end
 
+    -- ============================================================
+    -- MAIN LOOP
+    -- ============================================================
     RunService.RenderStepped:Connect(function()
-
-        FOVCircle.Position=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
-        FOVCircle.Radius=tonumber(FOVBox.Text) or 100
+        FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+        FOVCircle.Radius = tonumber(FOVBox.Text) or 100
 
         if espOn then
-
-            espDistance=tonumber(ESPDistBox.Text) or 100
-
-            for _,plr in pairs(Players:GetPlayers()) do
-                if plr~=player and plr.Character and plr.Character:FindFirstChild("Head") then
-
-                    local humanoid=plr.Character:FindFirstChildOfClass("Humanoid")
-
-                    if humanoid and humanoid.Health>0 then
-
+            espDistance = tonumber(ESPDistBox.Text) or 100
+            for _, plr in pairs(Players:GetPlayers()) do
+                if plr ~= player and plr.Character and plr.Character:FindFirstChild("Head") then
+                    local humanoid = plr.Character:FindFirstChildOfClass("Humanoid")
+                    if humanoid and humanoid.Health > 0 then
                         if not espLines[plr] then
-                            espLines[plr]=Drawing.new("Line")
-                            espLines[plr].Thickness=2
+                            espLines[plr] = Drawing.new("Line")
+                            espLines[plr].Thickness = 2
                         end
-
-                        local head=plr.Character.Head
-                        local screenPos,onScreen=Camera:WorldToViewportPoint(head.Position)
-                        local line=espLines[plr]
-
+                        local head = plr.Character.Head
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                        local line = espLines[plr]
                         if player.Character and player.Character:FindFirstChild("Head") then
-                            local dist=(player.Character.Head.Position-head.Position).Magnitude
-
-                            if onScreen and dist<=espDistance then
-                                line.Visible=true
-                                line.From=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y)
-                                line.To=Vector2.new(screenPos.X,screenPos.Y)
-
+                            local dist = (player.Character.Head.Position - head.Position).Magnitude
+                            if onScreen and dist <= espDistance then
+                                line.Visible = true
+                                line.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
+                                line.To = Vector2.new(screenPos.X, screenPos.Y)
                                 if player:IsFriendsWith(plr.UserId) then
-                                    line.Color=Color3.fromRGB(0,255,0)
+                                    line.Color = Color3.fromRGB(0,255,0)
                                 else
-                                    -- Blue sky color instead of red
-                                    line.Color=Color3.fromRGB(135,206,250)
+                                    line.Color = Color3.fromRGB(135,206,250)
                                 end
                             else
-                                line.Visible=false
+                                line.Visible = false
                             end
                         end
                     end
@@ -664,47 +881,105 @@ local function createGUI()
         end
 
         if aimOn then
-            local target=getClosestTarget()
-
+            local target = getClosestTarget()
             if target then
-
-                local head=nil
-
-                if target:IsA("Player") then
-                    if target.Character then
-                        head=target.Character:FindFirstChild("Head")
+                local targetPart = "Head"
+                if aimPartMode == "Body" then
+                    targetPart = "UpperTorso"
+                    if target:IsA("Player") and target.Character and not target.Character:FindFirstChild("UpperTorso") then
+                        targetPart = "Torso"
+                    end
+                elseif aimPartMode == "Silent" then
+                    if silentPartMode == "Body" then
+                        targetPart = "UpperTorso"
+                        if target:IsA("Player") and target.Character and not target.Character:FindFirstChild("UpperTorso") then
+                            targetPart = "Torso"
+                        end
+                    else
+                        targetPart = "Head"
                     end
                 else
-                    head=target:FindFirstChild("Head")
+                    targetPart = "Head"
                 end
 
-                if head then
-                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
+                local part = nil
+                if target:IsA("Player") then
+                    if target.Character then
+                        part = target.Character:FindFirstChild(targetPart)
+                        if not part and targetPart ~= "Head" then
+                            part = target.Character:FindFirstChild("Head")
+                        end
+                    end
+                else
+                    part = target:FindFirstChild(targetPart)
+                    if not part and targetPart ~= "Head" then
+                        part = target:FindFirstChild("Head")
+                    end
+                end
 
-                    -- Auto shot logic: try to Activate the tool with a small cooldown
-                    if autoShot then
-                        if tick() - lastAutoShot >= autoShotInterval then
-                            lastAutoShot = tick()
-                            pcall(function()
-                                if player.Character then
-                                    local tool = player.Character:FindFirstChildOfClass("Tool")
-                                    if tool and tool.Parent then
-                                        tool:Activate()
+                if part then
+                    local statusLabel = aimPartMode
+                    if aimPartMode == "Silent" then
+                        statusLabel = "Silent-" .. silentPartMode
+                    end
+                    StatusText.Text = "Aim: Đã ngắm (" .. statusLabel .. ")"
+                    StatusText.TextColor3 = Color3.fromRGB(60, 255, 60)
+
+                    if aimPartMode ~= "Silent" then
+                        local aimPos = part.Position + Vector3.new(0, aimOffsetY, 0)
+                        local camPos = Camera.CFrame.Position
+                        if INSTANT_AIM then
+                            Camera.CFrame = CFrame.lookAt(camPos, aimPos)
+                        else
+                            local current = Camera.CFrame.LookVector
+                            local desired = (aimPos - camPos).Unit
+                            local newDir = current:Lerp(desired, 0.35).Unit
+                            Camera.CFrame = CFrame.lookAt(camPos, camPos + newDir)
+                        end
+                        if autoShot then
+                            if tick() - lastAutoShot >= autoShotInterval then
+                                lastAutoShot = tick()
+                                pcall(function()
+                                    if player.Character then
+                                        local tool = player.Character:FindFirstChildOfClass("Tool")
+                                        if tool and tool.Parent then tool:Activate() end
                                     end
-                                end
-                            end)
+                                end)
+                            end
+                        end
+                    else
+                        -- Silent: KHÔNG xoay camera, chỉ tool:Activate() để trigger CheckShoot hook
+                        if autoShot then
+                            if tick() - lastAutoShot >= autoShotInterval then
+                                lastAutoShot = tick()
+                                pcall(function()
+                                    if player.Character then
+                                        local tool = player.Character:FindFirstChildOfClass("Tool")
+                                        if tool and tool.Parent then tool:Activate() end
+                                    end
+                                end)
+                            end
                         end
                     end
                 end
+            else
+                local statusLabel = aimPartMode
+                if aimPartMode == "Silent" then
+                    statusLabel = "Silent-" .. silentPartMode
+                end
+                StatusText.Text = "Aim: Chưa ngắm (" .. statusLabel .. ")"
+                StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
             end
+        else
+            StatusText.Text = "Aim: OFF"
+            StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
         end
     end)
 
-    UIS.InputBegan:Connect(function(input,gp)
+    UIS.InputBegan:Connect(function(input, gp)
         if gp then return end
-
-        if input.KeyCode==Enum.KeyCode.M then
-            MainFrame.Visible=not MainFrame.Visible
+        if input.KeyCode == Enum.KeyCode.M then
+            MainFrame.Visible = not MainFrame.Visible
         end
     end)
 end
