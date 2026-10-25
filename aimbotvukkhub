@@ -1,5 +1,5 @@
 -- ============================================================
--- AimHead vuhub (FULL FINAL - Cách 3 silent aim tự viết)
+-- AimHead vuhub (FULL FINAL - Silent ép 100% Head/Body)
 -- ============================================================
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -32,14 +32,21 @@ local autoShotInterval = 0.12
 local aimRange = 0
 
 -- ==== AIM MODE ====
-local aimPartMode = "Head"   -- "Head" | "Body" | "Silent"
-local silentPartMode = "Head" -- "Head" | "Body" (chỉ silent)
+local aimPartMode = "Head"
+local silentPartMode = "Head"
 local aimOffsetY  = 0
 local INSTANT_AIM = true
 
 -- ==== STATUS BANNER ====
 local statusVisible = true
 local statusSize    = 16
+
+-- ==== SHARED FOV ====
+local currentFOV = 100
+
+-- ==== SILENT EXPOSE ====
+local silentAimReady = false
+local silentGetTarget = nil
 
 -- ============================================================
 -- HOOK TEAM SERVER
@@ -84,11 +91,8 @@ local function isSameTeam(a, b)
 end
 
 -- ============================================================
--- SILENT AIM (Cách 3 - tự viết, dựa trên script gốc sneeky)
+-- SILENT AIM (ép 100% Head/Body, bắn tay, FOV chung)
 -- ============================================================
-local silentAimReady = false
-local silentFOV = 300
-
 local function setupSilentAim()
     if silentAimReady then return true end
     if not (hookfunction and require) then
@@ -109,21 +113,23 @@ local function setupSilentAim()
     rp.FilterType = Enum.RaycastFilterType.Exclude
     rp.IgnoreWater = true
 
-    local function isVisible(part, origin)
+    local function isVisible(part)
         local char = player.Character
-        if not (char and part) then return false, nil end
+        if not (char and part) then return false end
+
+        local camPos = Camera.CFrame.Position
         rp.FilterDescendantsInstances = {char}
-        local dir = part.Position - origin
-        local result = Workspace:Raycast(origin, dir, rp)
-        if not result then return true, nil end
+        local dir = part.Position - camPos
+        local result = Workspace:Raycast(camPos, dir, rp)
+        if not result then return true end
         if result.Instance:IsDescendantOf(part.Parent) then
-            return true, result.Instance
+            return true
         end
-        return false, result.Instance
+        return false
     end
 
     local function getTarget(origin)
-        local cPart, cDistance = nil, silentFOV
+        local cPart, cDistance = nil, currentFOV
         for _, plr in next, Players:GetPlayers() do
             if plr == player then continue end
             local char = plr.Character
@@ -135,24 +141,18 @@ local function setupSilentAim()
                     and char.UI_AlwaysVisible:FindFirstChild("IconTeamMate", true).Visible)
             then continue end
 
-            -- ==== CHỌN PART THEO MODE ====
             local tPart
             if silentPartMode == "Body" then
-                tPart = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char.PrimaryPart
+                tPart = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
             else
-                tPart = char:FindFirstChild("Head") or char.PrimaryPart
+                tPart = char:FindFirstChild("Head")
             end
             if not tPart then continue end
 
             local pos, onScreen = Camera:WorldToViewportPoint(tPart.Position)
             if not onScreen then continue end
 
-            local v, nTPart = isVisible(tPart, origin)
-            if not v then
-                v, nTPart = isVisible(char.PrimaryPart or char:FindFirstChild("HumanoidRootPart"), origin)
-                if not v then continue end
-            end
-            if nTPart then tPart = nTPart end
+            if not isVisible(tPart) then continue end
 
             local distance = (Vector2.new(pos.X, pos.Y)
                 - (isMobile and Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2) or UIS:GetMouseLocation())).Magnitude
@@ -164,26 +164,27 @@ local function setupSilentAim()
         return cPart
     end
 
-    -- Triệt recoil/spread
     rawset(dmg, "GetYaw", function() return 0 end)
     rawset(dmg, "GetPitch", function() return 0 end)
 
-    -- Hook CheckShoot
     local old
     old = clonefunction(hookfunction(rawget(dmg, "CheckShoot"), newcclosure(function(origin, plr, ...)
         if plr and plr == player then
             local oPos = origin.Position
             local c = getTarget(oPos)
             if c and c.Parent and c.Parent:FindFirstChild("Humanoid") then
+                local isHead = (silentPartMode == "Head")
                 local dir = c.Position - oPos
                 return {
                     ["instance"] = c,
-                    ["finalPosition"] = oPos + dir * dir.Magnitude,
-                    ["normal"] = dir.Unit,
+                    ["finalPosition"] = c.Position,
+                    ["normal"] = -dir.Unit,
                     ["bulletDirection"] = dir,
-                    ["headshot"] = c.Name == "Head",
+                    ["headshot"] = isHead,
                     ["victimCha"] = c.Parent,
                     ["victimHum"] = c.Parent.Humanoid,
+                    ["hitPart"] = c,
+                    ["hitPartName"] = isHead and "Head" or "Body",
                 }
             end
         end
@@ -191,6 +192,7 @@ local function setupSilentAim()
     end)))
 
     silentAimReady = true
+    silentGetTarget = getTarget
     print("[SilentAim] Ready — mode: " .. silentPartMode)
     return true
 end
@@ -234,8 +236,8 @@ local function createGUI()
 
     -- MAIN FRAME
     local MainFrame = Instance.new("Frame", ScreenGui)
-    MainFrame.Size = UDim2.new(0,340,0,500)
-    MainFrame.Position = UDim2.new(0.5,-170,0.5,-250)
+    MainFrame.Size = UDim2.new(0,340,0,520)
+    MainFrame.Position = UDim2.new(0.5,-170,0.5,-260)
     MainFrame.BackgroundColor3 = Color3.fromRGB(135,206,250)
     MainFrame.BorderSizePixel = 0
     MainFrame.Active = true
@@ -389,7 +391,7 @@ local function createGUI()
 
     local AimModeBtn = makeButton(SettingPage, "Aim Part: Head", UDim2.new(0.1,0,0,110))
 
-    -- OFFSET Y (chỉ hiện khi Head)
+    -- OFFSET Y
     local OffsetLabel = Instance.new("TextLabel", SettingPage)
     OffsetLabel.Size = UDim2.new(0.8,0,0,20)
     OffsetLabel.Position = UDim2.new(0.1,0,0,146)
@@ -415,7 +417,7 @@ local function createGUI()
         aimOffsetY = tonumber(OffsetBox.Text) or 0
     end)
 
-    -- SILENT PART (chỉ hiện khi Silent)
+    -- SILENT PART
     local SilentPartLabel = Instance.new("TextLabel", SettingPage)
     SilentPartLabel.Size = UDim2.new(0.8,0,0,20)
     SilentPartLabel.Position = UDim2.new(0.1,0,0,146)
@@ -431,9 +433,13 @@ local function createGUI()
     SilentPartBtn.Visible = false
 
     SilentPartBtn.MouseButton1Click:Connect(function()
-        if silentPartMode == "Head" then silentPartMode = "Body"
-        else silentPartMode = "Head" end
+        if silentPartMode == "Head" then
+            silentPartMode = "Body"
+        else
+            silentPartMode = "Head"
+        end
         SilentPartBtn.Text = "Silent Part: " .. silentPartMode
+        print("[SilentAim] Mode changed to: " .. silentPartMode)
     end)
 
     local function refreshAimPartUI()
@@ -480,6 +486,9 @@ local function createGUI()
     FOVBox.Font = Enum.Font.GothamBold
     FOVBox.TextSize = 16
     Instance.new("UICorner", FOVBox).CornerRadius = UDim.new(0,8)
+    FOVBox.FocusLost:Connect(function()
+        currentFOV = tonumber(FOVBox.Text) or 100
+    end)
 
     local ESPDistLabel = Instance.new("TextLabel", SettingPage)
     ESPDistLabel.Size = UDim2.new(0.8,0,0,20)
@@ -523,7 +532,6 @@ local function createGUI()
 
     local AutoFireBtn = makeButton(DistancePage, "Auto Fire: OFF", UDim2.new(0.1,0,0,110))
 
-    -- STATUS BANNER TOGGLE
     local StatusToggleBtn = makeButton(DistancePage, "Status Banner: ON", UDim2.new(0.1,0,0,150))
 
     local StatusSizeLabel = Instance.new("TextLabel", DistancePage)
@@ -767,7 +775,7 @@ local function createGUI()
 
     local function getClosestTarget()
         local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-        local fov = tonumber(FOVBox.Text) or 100
+        local fov = currentFOV
         aimRange = tonumber(DistanceBox.Text) or 0
 
         if priorityTarget and priorityTarget.Character then
@@ -844,8 +852,9 @@ local function createGUI()
     -- MAIN LOOP
     -- ============================================================
     RunService.RenderStepped:Connect(function()
+        currentFOV = tonumber(FOVBox.Text) or 100
         FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-        FOVCircle.Radius = tonumber(FOVBox.Text) or 100
+        FOVCircle.Radius = currentFOV
 
         if espOn then
             espDistance = tonumber(ESPDistBox.Text) or 100
@@ -881,16 +890,22 @@ local function createGUI()
         end
 
         if aimOn then
-            local target = getClosestTarget()
-            if target then
-                local targetPart = "Head"
-                if aimPartMode == "Body" then
-                    targetPart = "UpperTorso"
-                    if target:IsA("Player") and target.Character and not target.Character:FindFirstChild("UpperTorso") then
-                        targetPart = "Torso"
-                    end
-                elseif aimPartMode == "Silent" then
-                    if silentPartMode == "Body" then
+            -- ==== SILENT MODE: bắn tay, chỉ hiển thị trạng thái ====
+            if aimPartMode == "Silent" and silentGetTarget then
+                local c = silentGetTarget(Camera.CFrame.Position)
+                if c then
+                    StatusText.Text = "Aim: Đã ngắm (Silent-" .. silentPartMode .. ")"
+                    StatusText.TextColor3 = Color3.fromRGB(60, 255, 60)
+                else
+                    StatusText.Text = "Aim: Chưa ngắm (Silent-" .. silentPartMode .. ")"
+                    StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
+                end
+            else
+                -- ==== AIM THƯỜNG (Head/Body) ====
+                local target = getClosestTarget()
+                if target then
+                    local targetPart = "Head"
+                    if aimPartMode == "Body" then
                         targetPart = "UpperTorso"
                         if target:IsA("Player") and target.Character and not target.Character:FindFirstChild("UpperTorso") then
                             targetPart = "Torso"
@@ -898,34 +913,26 @@ local function createGUI()
                     else
                         targetPart = "Head"
                     end
-                else
-                    targetPart = "Head"
-                end
 
-                local part = nil
-                if target:IsA("Player") then
-                    if target.Character then
-                        part = target.Character:FindFirstChild(targetPart)
+                    local part = nil
+                    if target:IsA("Player") then
+                        if target.Character then
+                            part = target.Character:FindFirstChild(targetPart)
+                            if not part and targetPart ~= "Head" then
+                                part = target.Character:FindFirstChild("Head")
+                            end
+                        end
+                    else
+                        part = target:FindFirstChild(targetPart)
                         if not part and targetPart ~= "Head" then
-                            part = target.Character:FindFirstChild("Head")
+                            part = target:FindFirstChild("Head")
                         end
                     end
-                else
-                    part = target:FindFirstChild(targetPart)
-                    if not part and targetPart ~= "Head" then
-                        part = target:FindFirstChild("Head")
-                    end
-                end
 
-                if part then
-                    local statusLabel = aimPartMode
-                    if aimPartMode == "Silent" then
-                        statusLabel = "Silent-" .. silentPartMode
-                    end
-                    StatusText.Text = "Aim: Đã ngắm (" .. statusLabel .. ")"
-                    StatusText.TextColor3 = Color3.fromRGB(60, 255, 60)
+                    if part then
+                        StatusText.Text = "Aim: Đã ngắm (" .. aimPartMode .. ")"
+                        StatusText.TextColor3 = Color3.fromRGB(60, 255, 60)
 
-                    if aimPartMode ~= "Silent" then
                         local aimPos = part.Position + Vector3.new(0, aimOffsetY, 0)
                         local camPos = Camera.CFrame.Position
                         if INSTANT_AIM then
@@ -936,19 +943,7 @@ local function createGUI()
                             local newDir = current:Lerp(desired, 0.35).Unit
                             Camera.CFrame = CFrame.lookAt(camPos, camPos + newDir)
                         end
-                        if autoShot then
-                            if tick() - lastAutoShot >= autoShotInterval then
-                                lastAutoShot = tick()
-                                pcall(function()
-                                    if player.Character then
-                                        local tool = player.Character:FindFirstChildOfClass("Tool")
-                                        if tool and tool.Parent then tool:Activate() end
-                                    end
-                                end)
-                            end
-                        end
-                    else
-                        -- Silent: KHÔNG xoay camera, chỉ tool:Activate() để trigger CheckShoot hook
+
                         if autoShot then
                             if tick() - lastAutoShot >= autoShotInterval then
                                 lastAutoShot = tick()
@@ -961,14 +956,10 @@ local function createGUI()
                             end
                         end
                     end
+                else
+                    StatusText.Text = "Aim: Chưa ngắm (" .. aimPartMode .. ")"
+                    StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
                 end
-            else
-                local statusLabel = aimPartMode
-                if aimPartMode == "Silent" then
-                    statusLabel = "Silent-" .. silentPartMode
-                end
-                StatusText.Text = "Aim: Chưa ngắm (" .. statusLabel .. ")"
-                StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
             end
         else
             StatusText.Text = "Aim: OFF"
