@@ -1,5 +1,5 @@
 -- ============================================================
--- AimHead vuhub (FULL FINAL - IconTeamMate + Silent 100%)
+-- AimHead vuhub (FULL FINAL - ESP Box + Health + Check Team all)
 -- ============================================================
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -24,6 +24,9 @@ local priorityTarget = nil
 
 local espOn = false
 local espLines = {}
+local espBoxes = {}
+local espHealthBars = {}
+local espHealthFills = {}
 local espDistance = 100
 
 local autoShot = false
@@ -96,28 +99,19 @@ end
 
 local function isSameTeam(a, b)
     if not a or not b then return false end
-
-    -- 1) Team property
     if a.Team and b.Team and a.Team == b.Team then return true end
-
-    -- 2) TeamNum attribute
     local aNum = a:GetAttribute("TeamNum")
     local bNum = b:GetAttribute("TeamNum")
     if aNum and bNum and aNum == bNum then return true end
-
-    -- 3) Server hook (TeamSelected_R)
     local aSrv = a:IsA("Player") and serverTeamMap[a.UserId] or nil
     local bSrv = b:IsA("Player") and serverTeamMap[b.UserId] or nil
     if aSrv and bSrv and aSrv == bSrv then return true end
-
-    -- 4) CÁCH CỦA DOW: IconTeamMate
     if hasTeamIcon(a) or hasTeamIcon(b) then return true end
-
     return false
 end
 
 -- ============================================================
--- SILENT AIM (ép 100% Head/Body, bắn tay, FOV chung)
+-- SILENT AIM (ép 100% Head/Body, multi-ray 11 tia)
 -- ============================================================
 local function setupSilentAim()
     if silentAimReady then return true end
@@ -139,17 +133,33 @@ local function setupSilentAim()
     rp.FilterType = Enum.RaycastFilterType.Exclude
     rp.IgnoreWater = true
 
+    -- Multi-ray 11 tia: chỉ cần 1 tia lọt khe là thấy
     local function isVisible(part)
         local char = player.Character
         if not (char and part) then return false end
 
         local camPos = Camera.CFrame.Position
         rp.FilterDescendantsInstances = {char}
-        local dir = part.Position - camPos
-        local result = Workspace:Raycast(camPos, dir, rp)
-        if not result then return true end
-        if result.Instance:IsDescendantOf(part.Parent) then
-            return true
+
+        local offsets = {
+            Vector3.new(0, 0, 0),
+            Vector3.new(0, 0.3, 0), Vector3.new(0, -0.3, 0),
+            Vector3.new(0.3, 0, 0), Vector3.new(-0.3, 0, 0),
+            Vector3.new(0, 0, 0.3), Vector3.new(0, 0, -0.3),
+            Vector3.new(0.2, 0.2, 0), Vector3.new(-0.2, 0.2, 0),
+            Vector3.new(0.2, -0.2, 0), Vector3.new(-0.2, -0.2, 0),
+        }
+
+        for _, off in ipairs(offsets) do
+            local targetPos = part.Position + off
+            local dir = targetPos - camPos
+            local result = Workspace:Raycast(camPos, dir, rp)
+            if not result then
+                return true
+            end
+            if result.Instance:IsDescendantOf(part.Parent) then
+                return true
+            end
         end
         return false
     end
@@ -164,13 +174,11 @@ local function setupSilentAim()
                 or (char:FindFirstChild("Humanoid") and char.Humanoid.Health <= 0)
             then continue end
 
-            -- Check team/friend theo menu (gộp IconTeamMate)
             local skip = false
             if friendCheck and player:IsFriendsWith(plr.UserId) then skip = true end
             if not skip and teamCheck and isSameTeam(player, plr) then skip = true end
             if skip then continue end
 
-            -- CHỈ chọn đúng part theo mode, KHÔNG fallback
             local tPart
             if silentPartMode == "Body" then
                 tPart = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
@@ -266,8 +274,8 @@ local function createGUI()
 
     -- MAIN FRAME
     local MainFrame = Instance.new("Frame", ScreenGui)
-    MainFrame.Size = UDim2.new(0,340,0,520)
-    MainFrame.Position = UDim2.new(0.5,-170,0.5,-260)
+    MainFrame.Size = UDim2.new(0,340,0,600)
+    MainFrame.Position = UDim2.new(0.5,-170,0.5,-300)
     MainFrame.BackgroundColor3 = Color3.fromRGB(135,206,250)
     MainFrame.BorderSizePixel = 0
     MainFrame.Active = true
@@ -408,10 +416,12 @@ local function createGUI()
     -- SETTINGS TAB
     local TargetBtn = makeButton(SettingPage, "Select Target", UDim2.new(0.1,0,0,10))
     local ESPToggle = makeButton(SettingPage, "ESP Line: OFF", UDim2.new(0.1,0,0,50))
+    local ESPBoxToggle = makeButton(SettingPage, "ESP Box: OFF", UDim2.new(0.1,0,0,90))
+    local ESPHealthToggle = makeButton(SettingPage, "ESP Health Bar: OFF", UDim2.new(0.1,0,0,130))
 
     local AimModeLabel = Instance.new("TextLabel", SettingPage)
     AimModeLabel.Size = UDim2.new(0.8,0,0,20)
-    AimModeLabel.Position = UDim2.new(0.1,0,0,90)
+    AimModeLabel.Position = UDim2.new(0.1,0,0,170)
     AimModeLabel.BackgroundTransparency = 1
     AimModeLabel.Text = "Aim Part:"
     AimModeLabel.TextColor3 = Color3.new(1,1,1)
@@ -419,12 +429,12 @@ local function createGUI()
     AimModeLabel.TextSize = 14
     AimModeLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-    local AimModeBtn = makeButton(SettingPage, "Aim Part: Head", UDim2.new(0.1,0,0,110))
+    local AimModeBtn = makeButton(SettingPage, "Aim Part: Head", UDim2.new(0.1,0,0,190))
 
     -- OFFSET Y
     local OffsetLabel = Instance.new("TextLabel", SettingPage)
     OffsetLabel.Size = UDim2.new(0.8,0,0,20)
-    OffsetLabel.Position = UDim2.new(0.1,0,0,146)
+    OffsetLabel.Position = UDim2.new(0.1,0,0,226)
     OffsetLabel.BackgroundTransparency = 1
     OffsetLabel.Text = "Offset Y (0=đầu, 0.5=lố, -0.5=thấp):"
     OffsetLabel.TextColor3 = Color3.new(1,1,1)
@@ -435,7 +445,7 @@ local function createGUI()
 
     local OffsetBox = Instance.new("TextBox", SettingPage)
     OffsetBox.Size = UDim2.new(0.8,0,0,28)
-    OffsetBox.Position = UDim2.new(0.1,0,0,168)
+    OffsetBox.Position = UDim2.new(0.1,0,0,248)
     OffsetBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
     OffsetBox.Text = "0"
     OffsetBox.TextColor3 = Color3.new(1,1,1)
@@ -450,7 +460,7 @@ local function createGUI()
     -- SILENT PART
     local SilentPartLabel = Instance.new("TextLabel", SettingPage)
     SilentPartLabel.Size = UDim2.new(0.8,0,0,20)
-    SilentPartLabel.Position = UDim2.new(0.1,0,0,146)
+    SilentPartLabel.Position = UDim2.new(0.1,0,0,226)
     SilentPartLabel.BackgroundTransparency = 1
     SilentPartLabel.Text = "Silent Aim Part:"
     SilentPartLabel.TextColor3 = Color3.new(1,1,1)
@@ -459,15 +469,12 @@ local function createGUI()
     SilentPartLabel.TextXAlignment = Enum.TextXAlignment.Left
     SilentPartLabel.Visible = false
 
-    local SilentPartBtn = makeButton(SettingPage, "Silent Part: Head", UDim2.new(0.1,0,0,168))
+    local SilentPartBtn = makeButton(SettingPage, "Silent Part: Head", UDim2.new(0.1,0,0,248))
     SilentPartBtn.Visible = false
 
     SilentPartBtn.MouseButton1Click:Connect(function()
-        if silentPartMode == "Head" then
-            silentPartMode = "Body"
-        else
-            silentPartMode = "Head"
-        end
+        if silentPartMode == "Head" then silentPartMode = "Body"
+        else silentPartMode = "Head" end
         SilentPartBtn.Text = "Silent Part: " .. silentPartMode
         print("[SilentAim] Mode changed to: " .. silentPartMode)
     end)
@@ -499,7 +506,7 @@ local function createGUI()
     -- FOV
     local FOVLabel = Instance.new("TextLabel", SettingPage)
     FOVLabel.Size = UDim2.new(0.8,0,0,20)
-    FOVLabel.Position = UDim2.new(0.1,0,0,202)
+    FOVLabel.Position = UDim2.new(0.1,0,0,282)
     FOVLabel.BackgroundTransparency = 1
     FOVLabel.Text = "AimHead FOV:"
     FOVLabel.TextColor3 = Color3.new(1,1,1)
@@ -509,7 +516,7 @@ local function createGUI()
 
     local FOVBox = Instance.new("TextBox", SettingPage)
     FOVBox.Size = UDim2.new(0.8,0,0,28)
-    FOVBox.Position = UDim2.new(0.1,0,0,224)
+    FOVBox.Position = UDim2.new(0.1,0,0,304)
     FOVBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
     FOVBox.Text = "100"
     FOVBox.TextColor3 = Color3.new(1,1,1)
@@ -522,7 +529,7 @@ local function createGUI()
 
     local ESPDistLabel = Instance.new("TextLabel", SettingPage)
     ESPDistLabel.Size = UDim2.new(0.8,0,0,20)
-    ESPDistLabel.Position = UDim2.new(0.1,0,0,258)
+    ESPDistLabel.Position = UDim2.new(0.1,0,0,338)
     ESPDistLabel.BackgroundTransparency = 1
     ESPDistLabel.Text = "Enemy ESP Distance:"
     ESPDistLabel.TextColor3 = Color3.new(1,1,1)
@@ -532,7 +539,7 @@ local function createGUI()
 
     local ESPDistBox = Instance.new("TextBox", SettingPage)
     ESPDistBox.Size = UDim2.new(0.8,0,0,28)
-    ESPDistBox.Position = UDim2.new(0.1,0,0,280)
+    ESPDistBox.Position = UDim2.new(0.1,0,0,360)
     ESPDistBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
     ESPDistBox.Text = "100"
     ESPDistBox.TextColor3 = Color3.new(1,1,1)
@@ -561,7 +568,6 @@ local function createGUI()
     Instance.new("UICorner", DistanceBox).CornerRadius = UDim.new(0,8)
 
     local AutoFireBtn = makeButton(DistancePage, "Auto Fire: OFF", UDim2.new(0.1,0,0,110))
-
     local StatusToggleBtn = makeButton(DistancePage, "Status Banner: ON", UDim2.new(0.1,0,0,150))
 
     local StatusSizeLabel = Instance.new("TextLabel", DistancePage)
@@ -646,10 +652,8 @@ local function createGUI()
         return btn
     end
 
-    makeTeamCheckButton("Check Team (Team + TeamNum + Server + IconTeamMate)", teamCheck,
-        function(s) teamCheck = s end)
-    makeTeamCheckButton("Check Friends", friendCheck,
-        function(s) friendCheck = s end)
+    makeTeamCheckButton("Check Team (all)", teamCheck, function(s) teamCheck = s end)
+    makeTeamCheckButton("Check Friends", friendCheck, function(s) friendCheck = s end)
 
     -- TARGET FRAME
     local TargetFrame = Instance.new("Frame", ScreenGui)
@@ -665,6 +669,8 @@ local function createGUI()
     ResetBtn.BackgroundColor3 = Color3.fromRGB(100,180,255)
 
     local aimOn, wallCheck = false, false
+    local espBoxOn = false
+    local espHealthOn = false
 
     local FOVCircle = Drawing.new("Circle")
     FOVCircle.Visible = false
@@ -724,6 +730,25 @@ local function createGUI()
         end
     end)
 
+    ESPBoxToggle.MouseButton1Click:Connect(function()
+        espBoxOn = not espBoxOn
+        ESPBoxToggle.Text = "ESP Box: " .. (espBoxOn and "ON" or "OFF")
+        if not espBoxOn then
+            for _, v in pairs(espBoxes) do pcall(function() v:Destroy() end) end
+            espBoxes = {}
+        end
+    end)
+
+    ESPHealthToggle.MouseButton1Click:Connect(function()
+        espHealthOn = not espHealthOn
+        ESPHealthToggle.Text = "ESP Health Bar: " .. (espHealthOn and "ON" or "OFF")
+        if not espHealthOn then
+            for _, v in pairs(espHealthBars) do pcall(function() v:Destroy() end) end
+            for _, v in pairs(espHealthFills) do pcall(function() v:Destroy() end) end
+            espHealthBars = {}; espHealthFills = {}
+        end
+    end)
+
     TargetBtn.MouseButton1Click:Connect(function()
         TargetFrame.Visible = not TargetFrame.Visible
     end)
@@ -753,10 +778,10 @@ local function createGUI()
 
     Players.PlayerAdded:Connect(updatePlayerList)
     Players.PlayerRemoving:Connect(function(plr)
-        if espLines[plr] then
-            pcall(function() espLines[plr]:Destroy() end)
-            espLines[plr] = nil
-        end
+        if espLines[plr] then pcall(function() espLines[plr]:Destroy() end); espLines[plr] = nil end
+        if espBoxes[plr] then pcall(function() espBoxes[plr]:Destroy() end); espBoxes[plr] = nil end
+        if espHealthBars[plr] then pcall(function() espHealthBars[plr]:Destroy() end); espHealthBars[plr] = nil end
+        if espHealthFills[plr] then pcall(function() espHealthFills[plr]:Destroy() end); espHealthFills[plr] = nil end
         updatePlayerList()
     end)
     updatePlayerList()
@@ -886,39 +911,146 @@ local function createGUI()
         FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
         FOVCircle.Radius = currentFOV
 
-        if espOn then
+        -- ============ ESP ============
+        if espOn or espBoxOn or espHealthOn then
             espDistance = tonumber(ESPDistBox.Text) or 100
+            local myHead = player.Character and player.Character:FindFirstChild("Head")
+
             for _, plr in pairs(Players:GetPlayers()) do
-                if plr ~= player and plr.Character and plr.Character:FindFirstChild("Head") then
-                    local humanoid = plr.Character:FindFirstChildOfClass("Humanoid")
-                    if humanoid and humanoid.Health > 0 then
-                        if not espLines[plr] then
-                            espLines[plr] = Drawing.new("Line")
-                            espLines[plr].Thickness = 2
-                        end
-                        local head = plr.Character.Head
-                        local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
-                        local line = espLines[plr]
-                        if player.Character and player.Character:FindFirstChild("Head") then
-                            local dist = (player.Character.Head.Position - head.Position).Magnitude
-                            if onScreen and dist <= espDistance then
-                                line.Visible = true
-                                line.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
-                                line.To = Vector2.new(screenPos.X, screenPos.Y)
-                                if player:IsFriendsWith(plr.UserId) then
-                                    line.Color = Color3.fromRGB(0,255,0)
-                                else
-                                    line.Color = Color3.fromRGB(135,206,250)
+                if plr ~= player then
+                    local char = plr.Character
+                    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                    local head = char and char:FindFirstChild("Head")
+
+                    if char and humanoid and head and humanoid.Health > 0 and myHead then
+                        -- Check team/friend → ẩn ESP nếu bật
+                        local skipESP = false
+                        if teamCheck and isSameTeam(player, plr) then skipESP = true end
+                        if friendCheck and player:IsFriendsWith(plr.UserId) then skipESP = true end
+
+                        if skipESP then
+                            if espLines[plr] then espLines[plr].Visible = false end
+                            if espBoxes[plr] then espBoxes[plr].Visible = false end
+                            if espHealthBars[plr] then espHealthBars[plr].Visible = false end
+                            if espHealthFills[plr] then espHealthFills[plr].Visible = false end
+                        else
+                            local dist = (myHead.Position - head.Position).Magnitude
+                            if dist <= espDistance then
+                                local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+
+                                -- ESP LINE
+                                if espOn then
+                                    if not espLines[plr] then
+                                        espLines[plr] = Drawing.new("Line")
+                                        espLines[plr].Thickness = 2
+                                    end
+                                    local line = espLines[plr]
+                                    if onScreen then
+                                        line.Visible = true
+                                        line.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
+                                        line.To = Vector2.new(screenPos.X, screenPos.Y)
+                                        if player:IsFriendsWith(plr.UserId) then
+                                            line.Color = Color3.fromRGB(0,255,0)
+                                        else
+                                            line.Color = Color3.fromRGB(135,206,250)
+                                        end
+                                    else
+                                        line.Visible = false
+                                    end
+                                elseif espLines[plr] then
+                                    espLines[plr].Visible = false
+                                end
+
+                                -- ESP BOX
+                                if espBoxOn then
+                                    if not espBoxes[plr] then
+                                        espBoxes[plr] = Drawing.new("Square")
+                                        espBoxes[plr].Thickness = 1
+                                        espBoxes[plr].Filled = false
+                                    end
+                                    local box = espBoxes[plr]
+                                    if onScreen then
+                                        local topPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
+                                        local bottomPos = Camera:WorldToViewportPoint(char.PrimaryPart and char.PrimaryPart.Position or head.Position - Vector3.new(0, 1.5, 0))
+                                        local height = math.abs(topPos.Y - bottomPos.Y)
+                                        local width = height * 0.5
+                                        box.Visible = true
+                                        box.Size = Vector2.new(width, height)
+                                        box.Position = Vector2.new(screenPos.X - width/2, topPos.Y)
+                                        if player:IsFriendsWith(plr.UserId) then
+                                            box.Color = Color3.fromRGB(0,255,0)
+                                        else
+                                            box.Color = Color3.fromRGB(135,206,250)
+                                        end
+                                    else
+                                        box.Visible = false
+                                    end
+                                elseif espBoxes[plr] then
+                                    espBoxes[plr].Visible = false
+                                end
+
+                                -- ESP HEALTH BAR
+                                if espHealthOn then
+                                    if not espHealthBars[plr] then
+                                        espHealthBars[plr] = Drawing.new("Square")
+                                        espHealthBars[plr].Filled = true
+                                        espHealthBars[plr].Thickness = 0
+                                        espHealthFills[plr] = Drawing.new("Square")
+                                        espHealthFills[plr].Filled = true
+                                        espHealthFills[plr].Thickness = 0
+                                    end
+                                    local bg = espHealthBars[plr]
+                                    local fill = espHealthFills[plr]
+                                    if onScreen then
+                                        local topPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
+                                        local bottomPos = Camera:WorldToViewportPoint(char.PrimaryPart and char.PrimaryPart.Position or head.Position - Vector3.new(0, 1.5, 0))
+                                        local height = math.abs(topPos.Y - bottomPos.Y)
+                                        local barWidth = 3
+                                        local hpPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                                        local barX = screenPos.X - (height * 0.5 * 0.5) - barWidth - 3
+                                        local barY = topPos.Y
+
+                                        bg.Visible = true
+                                        bg.Size = Vector2.new(barWidth, height)
+                                        bg.Position = Vector2.new(barX, barY)
+                                        bg.Color = Color3.fromRGB(0, 0, 0)
+
+                                        fill.Visible = true
+                                        fill.Size = Vector2.new(barWidth, height * hpPercent)
+                                        fill.Position = Vector2.new(barX, barY + height * (1 - hpPercent))
+                                        if hpPercent > 0.6 then
+                                            fill.Color = Color3.fromRGB(0, 255, 0)
+                                        elseif hpPercent > 0.3 then
+                                            fill.Color = Color3.fromRGB(255, 200, 0)
+                                        else
+                                            fill.Color = Color3.fromRGB(255, 0, 0)
+                                        end
+                                    else
+                                        bg.Visible = false
+                                        fill.Visible = false
+                                    end
+                                elseif espHealthBars[plr] then
+                                    espHealthBars[plr].Visible = false
+                                    if espHealthFills[plr] then espHealthFills[plr].Visible = false end
                                 end
                             else
-                                line.Visible = false
+                                if espLines[plr] then espLines[plr].Visible = false end
+                                if espBoxes[plr] then espBoxes[plr].Visible = false end
+                                if espHealthBars[plr] then espHealthBars[plr].Visible = false end
+                                if espHealthFills[plr] then espHealthFills[plr].Visible = false end
                             end
                         end
+                    else
+                        if espLines[plr] then espLines[plr].Visible = false end
+                        if espBoxes[plr] then espBoxes[plr].Visible = false end
+                        if espHealthBars[plr] then espHealthBars[plr].Visible = false end
+                        if espHealthFills[plr] then espHealthFills[plr].Visible = false end
                     end
                 end
             end
         end
 
+        -- ============ AIM ============
         if aimOn then
             if aimPartMode == "Silent" and silentGetTarget then
                 local c = silentGetTarget(Camera.CFrame.Position)
