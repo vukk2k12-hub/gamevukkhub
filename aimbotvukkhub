@@ -1,5 +1,5 @@
 -- ============================================================
--- AimHead vuhub (FULL FINAL - ESP Box + Health + Check Team all)
+-- AimHead vuhub (FULL FINAL - Silent 3 mode + Random %H/%B + ESP + Reveal)
 -- ============================================================
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -29,16 +29,25 @@ local espHealthBars = {}
 local espHealthFills = {}
 local espDistance = 100
 
+-- NEW: Reveal mode
+local revealOn = false
+local revealVisibleCache = {}
+local REVEAL_CACHE_LIFETIME = 0.1
+
 local autoShot = false
 local lastAutoShot = 0
-local autoShotInterval = 0.12
+local autoShotInterval = 0.3
 local aimRange = 0
 
 -- ==== AIM MODE ====
 local aimPartMode = "Head"
-local silentPartMode = "Head"
+local silentPartMode = "Body"   -- "Body" | "Head" | "Random"
 local aimOffsetY  = 0
 local INSTANT_AIM = true
+
+-- ==== % cho mode Random ====
+local silentHeadPercent = 80
+local silentBodyPercent = 20
 
 -- ==== STATUS BANNER ====
 local statusVisible = true
@@ -50,6 +59,12 @@ local currentFOV = 100
 -- ==== SILENT EXPOSE ====
 local silentAimReady = false
 local silentGetTarget = nil
+
+-- ==== CACHE ====
+local cachedSilentTarget = nil
+local cachedSilentPartName = "Head"
+local cachedSilentTargetTime = 0
+local CACHE_LIFETIME = 0.004  -- 4ms: fresh mỗi frame, không spam raycast
 
 -- ============================================================
 -- HOOK TEAM SERVER
@@ -82,13 +97,11 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- CHECK TEAM (gộp Team + TeamNum + Server + IconTeamMate DoW)
+-- CHECK TEAM
 -- ============================================================
 local function hasTeamIcon(inst)
     local char = inst
-    if inst:IsA("Player") then
-        char = inst.Character
-    end
+    if inst:IsA("Player") then char = inst.Character end
     if not char then return false end
     local ui = char:FindFirstChild("UI_AlwaysVisible")
     if not ui then return false end
@@ -111,7 +124,30 @@ local function isSameTeam(a, b)
 end
 
 -- ============================================================
--- SILENT AIM (ép 100% Head/Body, multi-ray 11 tia)
+-- VISIBILITY (dùng cho Reveal)
+-- ============================================================
+local function isVisibleToCamera(targetPart)
+    if not targetPart then return false end
+    local origin = Camera.CFrame.Position
+    local dir = targetPart.Position - origin
+    local distance = dir.Magnitude
+    if distance <= 0 then return true end
+    dir = dir.Unit
+
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Blacklist
+    local ignore = { targetPart.Parent }
+    if player.Character then table.insert(ignore, player.Character) end
+    rp.FilterDescendantsInstances = ignore
+
+    local ray = Workspace:Raycast(origin, dir * distance, rp)
+    if not ray then return true end
+    if ray.Instance:IsDescendantOf(targetPart.Parent) then return true end
+    return false
+end
+
+-- ============================================================
+-- SILENT AIM (3 mode: Body / Head / Random)
 -- ============================================================
 local function setupSilentAim()
     if silentAimReady then return true end
@@ -133,7 +169,6 @@ local function setupSilentAim()
     rp.FilterType = Enum.RaycastFilterType.Exclude
     rp.IgnoreWater = true
 
-    -- Multi-ray 11 tia: chỉ cần 1 tia lọt khe là thấy
     local function isVisible(part)
         local char = player.Character
         if not (char and part) then return false end
@@ -141,31 +176,56 @@ local function setupSilentAim()
         local camPos = Camera.CFrame.Position
         rp.FilterDescendantsInstances = {char}
 
-        local offsets = {
-            Vector3.new(0, 0, 0),
-            Vector3.new(0, 0.3, 0), Vector3.new(0, -0.3, 0),
-            Vector3.new(0.3, 0, 0), Vector3.new(-0.3, 0, 0),
-            Vector3.new(0, 0, 0.3), Vector3.new(0, 0, -0.3),
-            Vector3.new(0.2, 0.2, 0), Vector3.new(-0.2, 0.2, 0),
-            Vector3.new(0.2, -0.2, 0), Vector3.new(-0.2, -0.2, 0),
-        }
+        local dir = part.Position - camPos
+        local result = Workspace:Raycast(camPos, dir, rp)
+        if not result then return true end
+        if result.Instance:IsDescendantOf(part.Parent) then return true end
 
+        local offsets = {
+            Vector3.new(0, 0.5, 0), Vector3.new(0, -0.5, 0),
+            Vector3.new(0.5, 0, 0), Vector3.new(-0.5, 0, 0),
+            Vector3.new(0, 0, 0.5), Vector3.new(0, 0, -0.5),
+        }
         for _, off in ipairs(offsets) do
-            local targetPos = part.Position + off
-            local dir = targetPos - camPos
-            local result = Workspace:Raycast(camPos, dir, rp)
-            if not result then
-                return true
-            end
-            if result.Instance:IsDescendantOf(part.Parent) then
-                return true
-            end
+            local d = (part.Position + off) - camPos
+            local r = Workspace:Raycast(camPos, d, rp)
+            if not r then return true end
+            if r.Instance:IsDescendantOf(part.Parent) then return true end
         end
+
         return false
     end
 
+    local function pickPartByMode(char)
+        local head = char:FindFirstChild("Head")
+        local body = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+
+        local mode = silentPartMode
+
+        if mode == "Body" then
+            return body, "Body"
+
+        elseif mode == "Head" then
+            return head, "Head"
+
+        elseif mode == "Random" then
+            local r = math.random() * 100
+            if r < silentHeadPercent then
+                if head and isVisible(head) then return head, "Head" end
+                if body and isVisible(body) then return body, "Body" end
+                return head, "Head"
+            else
+                if body and isVisible(body) then return body, "Body" end
+                if head and isVisible(head) then return head, "Head" end
+                return body, "Body"
+            end
+        end
+
+        return head, "Head"
+    end
+
     local function getTarget(origin)
-        local cPart, cDistance = nil, currentFOV
+        local cPart, cDistance, cPartName = nil, currentFOV, "Head"
         for _, plr in next, Players:GetPlayers() do
             if plr == player then continue end
             local char = plr.Character
@@ -179,17 +239,11 @@ local function setupSilentAim()
             if not skip and teamCheck and isSameTeam(player, plr) then skip = true end
             if skip then continue end
 
-            local tPart
-            if silentPartMode == "Body" then
-                tPart = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-            else
-                tPart = char:FindFirstChild("Head")
-            end
+            local tPart, partName = pickPartByMode(char)
             if not tPart then continue end
 
             local pos, onScreen = Camera:WorldToViewportPoint(tPart.Position)
             if not onScreen then continue end
-
             if not isVisible(tPart) then continue end
 
             local distance = (Vector2.new(pos.X, pos.Y)
@@ -197,9 +251,10 @@ local function setupSilentAim()
             if distance < cDistance then
                 cPart = tPart
                 cDistance = distance
+                cPartName = partName
             end
         end
-        return cPart
+        return cPart, cPartName
     end
 
     rawset(dmg, "GetYaw", function() return 0 end)
@@ -209,20 +264,35 @@ local function setupSilentAim()
     old = clonefunction(hookfunction(rawget(dmg, "CheckShoot"), newcclosure(function(origin, plr, ...)
         if plr and plr == player then
             local oPos = origin.Position
-            local c = getTarget(oPos)
+
+            local c, partName = cachedSilentTarget, cachedSilentPartName
+            if not c or not c.Parent or not c.Parent:FindFirstChild("Humanoid") or tick() - cachedSilentTargetTime > CACHE_LIFETIME then
+                c, partName = getTarget(oPos)
+                cachedSilentTarget = c
+                cachedSilentPartName = partName
+                cachedSilentTargetTime = tick()
+            end
+
             if c and c.Parent and c.Parent:FindFirstChild("Humanoid") then
-                local isHead = (silentPartMode == "Head")
+                local isHead = (partName == "Head")
                 local dir = c.Position - oPos
+                local dist = dir.Magnitude
+                local unitDir = dir.Unit
+
+                -- NEW: reset cache sau mỗi viên → viên sau luôn fresh
+                cachedSilentTarget = nil
+                cachedSilentTargetTime = 0
+
                 return {
                     ["instance"] = c,
-                    ["finalPosition"] = c.Position,
-                    ["normal"] = -dir.Unit,
-                    ["bulletDirection"] = dir,
+                    ["finalPosition"] = oPos + unitDir * dist,
+                    ["normal"] = -unitDir,
+                    ["bulletDirection"] = unitDir,
                     ["headshot"] = isHead,
                     ["victimCha"] = c.Parent,
                     ["victimHum"] = c.Parent.Humanoid,
                     ["hitPart"] = c,
-                    ["hitPartName"] = isHead and "Head" or "Body",
+                    ["hitPartName"] = partName,
                 }
             end
         end
@@ -231,7 +301,7 @@ local function setupSilentAim()
 
     silentAimReady = true
     silentGetTarget = getTarget
-    print("[SilentAim] Ready — mode: " .. silentPartMode)
+    print("[SilentAim] Ready")
     return true
 end
 
@@ -259,7 +329,7 @@ local function createGUI()
     StatusText.Size = UDim2.new(1, -10, 1, 0)
     StatusText.Position = UDim2.new(0, 5, 0, 0)
     StatusText.BackgroundTransparency = 1
-    StatusText.Text = "Aim: Chưa ngắm (Head)"
+    StatusText.Text = "Chưa ngắm"
     StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
     StatusText.Font = Enum.Font.GothamBold
     StatusText.TextSize = statusSize
@@ -267,15 +337,15 @@ local function createGUI()
 
     local function syncStatusSize()
         StatusText.TextSize = statusSize
-        StatusFrame.Size = UDim2.new(0, math.clamp(180 + statusSize * 6, 200, 400), 0, statusSize + 14)
+        StatusFrame.Size = UDim2.new(0, math.clamp(160 + statusSize * 6, 200, 400), 0, statusSize + 14)
         StatusFrame.Position = UDim2.new(0.5, -StatusFrame.Size.X.Offset/2, 0, 10)
     end
     syncStatusSize()
 
     -- MAIN FRAME
     local MainFrame = Instance.new("Frame", ScreenGui)
-    MainFrame.Size = UDim2.new(0,340,0,600)
-    MainFrame.Position = UDim2.new(0.5,-170,0.5,-300)
+    MainFrame.Size = UDim2.new(0, 640, 0, 520)
+    MainFrame.Position = UDim2.new(0.5, -320, 0.5, -260)
     MainFrame.BackgroundColor3 = Color3.fromRGB(135,206,250)
     MainFrame.BorderSizePixel = 0
     MainFrame.Active = true
@@ -289,7 +359,7 @@ local function createGUI()
     OpenBtn.TextColor3 = Color3.new(1,1,1)
     OpenBtn.Font = Enum.Font.GothamBold
     OpenBtn.TextSize = 24
-    OpenBtn.Visible = false
+    OpenBtn.Visible = true   -- NEW: luôn hiện
     Instance.new("UICorner", OpenBtn).CornerRadius = UDim.new(1,0)
 
     -- Drag MainFrame
@@ -338,15 +408,10 @@ local function createGUI()
         end
     end)
 
-    local MinBtn = Instance.new("TextButton", MainFrame)
-    MinBtn.Size = UDim2.new(0,30,0,30)
-    MinBtn.Position = UDim2.new(1,-35,0,5)
-    MinBtn.BackgroundColor3 = Color3.fromRGB(100,180,255)
-    MinBtn.Text = "-"
-    MinBtn.TextColor3 = Color3.new(1,1,1)
-    MinBtn.Font = Enum.Font.GothamBold
-    MinBtn.TextSize = 20
-    Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0,5)
+    -- NEW: bỏ MinBtn, chỉ dùng OpenBtn toggle
+    OpenBtn.MouseButton1Click:Connect(function()
+        MainFrame.Visible = not MainFrame.Visible
+    end)
 
     local Title = Instance.new("TextLabel", MainFrame)
     Title.Size = UDim2.new(1,0,0,40)
@@ -469,27 +534,85 @@ local function createGUI()
     SilentPartLabel.TextXAlignment = Enum.TextXAlignment.Left
     SilentPartLabel.Visible = false
 
-    local SilentPartBtn = makeButton(SettingPage, "Silent Part: Head", UDim2.new(0.1,0,0,248))
+    local SilentPartBtn = makeButton(SettingPage, "Silent: Body", UDim2.new(0.1,0,0,248))
     SilentPartBtn.Visible = false
 
+    local PercentHeadBox = Instance.new("TextBox", SettingPage)
+    PercentHeadBox.Size = UDim2.new(0.38,0,0,28)
+    PercentHeadBox.Position = UDim2.new(0.1,0,0,284)
+    PercentHeadBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    PercentHeadBox.Text = "80"
+    PercentHeadBox.PlaceholderText = "% Head"
+    PercentHeadBox.TextColor3 = Color3.new(1,1,1)
+    PercentHeadBox.Font = Enum.Font.GothamBold
+    PercentHeadBox.TextSize = 16
+    PercentHeadBox.Visible = false
+    Instance.new("UICorner", PercentHeadBox).CornerRadius = UDim.new(0,8)
+
+    local PercentBodyBox = Instance.new("TextBox", SettingPage)
+    PercentBodyBox.Size = UDim2.new(0.38,0,0,28)
+    PercentBodyBox.Position = UDim2.new(0.52,0,0,284)
+    PercentBodyBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    PercentBodyBox.Text = "20"
+    PercentBodyBox.PlaceholderText = "% Body"
+    PercentBodyBox.TextColor3 = Color3.new(1,1,1)
+    PercentBodyBox.Font = Enum.Font.GothamBold
+    PercentBodyBox.TextSize = 16
+    PercentBodyBox.Visible = false
+    Instance.new("UICorner", PercentBodyBox).CornerRadius = UDim.new(0,8)
+
+    PercentHeadBox.FocusLost:Connect(function()
+        local h = math.clamp(tonumber(PercentHeadBox.Text) or 80, 0, 100)
+        silentHeadPercent = h
+        silentBodyPercent = 100 - h
+        PercentHeadBox.Text = tostring(h)
+        PercentBodyBox.Text = tostring(silentBodyPercent)
+    end)
+
+    PercentBodyBox.FocusLost:Connect(function()
+        local b = math.clamp(tonumber(PercentBodyBox.Text) or 20, 0, 100)
+        silentBodyPercent = b
+        silentHeadPercent = 100 - b
+        PercentBodyBox.Text = tostring(b)
+        PercentHeadBox.Text = tostring(silentHeadPercent)
+    end)
+
+    local SILENT_MODES = { "Body", "Head", "Random" }
+
+    local function refreshPctVisibility()
+        local show = (silentPartMode == "Random") and SilentPartBtn.Visible
+        PercentHeadBox.Visible = show
+        PercentBodyBox.Visible = show
+    end
+
     SilentPartBtn.MouseButton1Click:Connect(function()
-        if silentPartMode == "Head" then silentPartMode = "Body"
-        else silentPartMode = "Head" end
-        SilentPartBtn.Text = "Silent Part: " .. silentPartMode
-        print("[SilentAim] Mode changed to: " .. silentPartMode)
+        local idx = 1
+        for i, m in ipairs(SILENT_MODES) do
+            if m == silentPartMode then idx = i break end
+        end
+        silentPartMode = SILENT_MODES[(idx % #SILENT_MODES) + 1]
+        SilentPartBtn.Text = "Silent: " .. silentPartMode
+        refreshPctVisibility()
+        print("[SilentAim] Mode: " .. silentPartMode
+            .. ((silentPartMode == "Random")
+                and (" ("..silentHeadPercent.."%H/"..silentBodyPercent.."%B)") or ""))
     end)
 
     local function refreshAimPartUI()
+        local showSilent = (aimPartMode == "Silent")
+        SilentPartLabel.Visible = showSilent
+        SilentPartBtn.Visible = showSilent
+
         if aimPartMode == "Head" then
             OffsetLabel.Visible = true; OffsetBox.Visible = true
-            SilentPartLabel.Visible = false; SilentPartBtn.Visible = false
-        elseif aimPartMode == "Body" then
-            OffsetLabel.Visible = false; OffsetBox.Visible = false
-            SilentPartLabel.Visible = false; SilentPartBtn.Visible = false
         else
             OffsetLabel.Visible = false; OffsetBox.Visible = false
-            SilentPartLabel.Visible = true; SilentPartBtn.Visible = true
         end
+
+        if showSilent then
+            SilentPartBtn.Text = "Silent: " .. silentPartMode
+        end
+        refreshPctVisibility()
     end
 
     AimModeBtn.MouseButton1Click:Connect(function()
@@ -503,10 +626,29 @@ local function createGUI()
 
     refreshAimPartUI()
 
-    -- FOV
-    local FOVLabel = Instance.new("TextLabel", SettingPage)
+    -- DISTANCE TAB
+    local DistanceLabel = Instance.new("TextLabel", DistancePage)
+    DistanceLabel.Size = UDim2.new(0.8,0,0,30)
+    DistanceLabel.Position = UDim2.new(0.1,0,0,10)
+    DistanceLabel.BackgroundTransparency = 1
+    DistanceLabel.Text = "Aim Distance (0 = infinite):"
+    DistanceLabel.TextColor3 = Color3.new(1,1,1)
+    DistanceLabel.Font = Enum.Font.GothamBold
+    DistanceLabel.TextSize = 16
+
+    local DistanceBox = Instance.new("TextBox", DistancePage)
+    DistanceBox.Size = UDim2.new(0.8,0,0,30)
+    DistanceBox.Position = UDim2.new(0.1,0,0,45)
+    DistanceBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    DistanceBox.Text = "0"
+    DistanceBox.TextColor3 = Color3.new(1,1,1)
+    DistanceBox.Font = Enum.Font.GothamBold
+    DistanceBox.TextSize = 16
+    Instance.new("UICorner", DistanceBox).CornerRadius = UDim.new(0,8)
+
+    local FOVLabel = Instance.new("TextLabel", DistancePage)
     FOVLabel.Size = UDim2.new(0.8,0,0,20)
-    FOVLabel.Position = UDim2.new(0.1,0,0,282)
+    FOVLabel.Position = UDim2.new(0.1,0,0,90)
     FOVLabel.BackgroundTransparency = 1
     FOVLabel.Text = "AimHead FOV:"
     FOVLabel.TextColor3 = Color3.new(1,1,1)
@@ -514,9 +656,9 @@ local function createGUI()
     FOVLabel.TextSize = 14
     FOVLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-    local FOVBox = Instance.new("TextBox", SettingPage)
+    local FOVBox = Instance.new("TextBox", DistancePage)
     FOVBox.Size = UDim2.new(0.8,0,0,28)
-    FOVBox.Position = UDim2.new(0.1,0,0,304)
+    FOVBox.Position = UDim2.new(0.1,0,0,112)
     FOVBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
     FOVBox.Text = "100"
     FOVBox.TextColor3 = Color3.new(1,1,1)
@@ -527,9 +669,9 @@ local function createGUI()
         currentFOV = tonumber(FOVBox.Text) or 100
     end)
 
-    local ESPDistLabel = Instance.new("TextLabel", SettingPage)
+    local ESPDistLabel = Instance.new("TextLabel", DistancePage)
     ESPDistLabel.Size = UDim2.new(0.8,0,0,20)
-    ESPDistLabel.Position = UDim2.new(0.1,0,0,338)
+    ESPDistLabel.Position = UDim2.new(0.1,0,0,150)
     ESPDistLabel.BackgroundTransparency = 1
     ESPDistLabel.Text = "Enemy ESP Distance:"
     ESPDistLabel.TextColor3 = Color3.new(1,1,1)
@@ -537,9 +679,9 @@ local function createGUI()
     ESPDistLabel.TextSize = 14
     ESPDistLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-    local ESPDistBox = Instance.new("TextBox", SettingPage)
+    local ESPDistBox = Instance.new("TextBox", DistancePage)
     ESPDistBox.Size = UDim2.new(0.8,0,0,28)
-    ESPDistBox.Position = UDim2.new(0.1,0,0,360)
+    ESPDistBox.Position = UDim2.new(0.1,0,0,172)
     ESPDistBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
     ESPDistBox.Text = "100"
     ESPDistBox.TextColor3 = Color3.new(1,1,1)
@@ -547,32 +689,12 @@ local function createGUI()
     ESPDistBox.TextSize = 16
     Instance.new("UICorner", ESPDistBox).CornerRadius = UDim.new(0,8)
 
-    -- DISTANCE TAB
-    local DistanceLabel = Instance.new("TextLabel", DistancePage)
-    DistanceLabel.Size = UDim2.new(0.8,0,0,30)
-    DistanceLabel.Position = UDim2.new(0.1,0,0,20)
-    DistanceLabel.BackgroundTransparency = 1
-    DistanceLabel.Text = "Aim Distance (0 = infinite):"
-    DistanceLabel.TextColor3 = Color3.new(1,1,1)
-    DistanceLabel.Font = Enum.Font.GothamBold
-    DistanceLabel.TextSize = 16
-
-    local DistanceBox = Instance.new("TextBox", DistancePage)
-    DistanceBox.Size = UDim2.new(0.8,0,0,30)
-    DistanceBox.Position = UDim2.new(0.1,0,0,60)
-    DistanceBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
-    DistanceBox.Text = "0"
-    DistanceBox.TextColor3 = Color3.new(1,1,1)
-    DistanceBox.Font = Enum.Font.GothamBold
-    DistanceBox.TextSize = 16
-    Instance.new("UICorner", DistanceBox).CornerRadius = UDim.new(0,8)
-
-    local AutoFireBtn = makeButton(DistancePage, "Auto Fire: OFF", UDim2.new(0.1,0,0,110))
-    local StatusToggleBtn = makeButton(DistancePage, "Status Banner: ON", UDim2.new(0.1,0,0,150))
+    local AutoFireBtn = makeButton(DistancePage, "Auto Fire: OFF", UDim2.new(0.1,0,0,215))
+    local StatusToggleBtn = makeButton(DistancePage, "Status Banner: ON", UDim2.new(0.1,0,0,255))
 
     local StatusSizeLabel = Instance.new("TextLabel", DistancePage)
     StatusSizeLabel.Size = UDim2.new(0.8,0,0,20)
-    StatusSizeLabel.Position = UDim2.new(0.1,0,0,190)
+    StatusSizeLabel.Position = UDim2.new(0.1,0,0,295)
     StatusSizeLabel.BackgroundTransparency = 1
     StatusSizeLabel.Text = "Status Banner Size:"
     StatusSizeLabel.TextColor3 = Color3.new(1,1,1)
@@ -582,7 +704,7 @@ local function createGUI()
 
     local StatusSizeBox = Instance.new("TextBox", DistancePage)
     StatusSizeBox.Size = UDim2.new(0.8,0,0,28)
-    StatusSizeBox.Position = UDim2.new(0.1,0,0,212)
+    StatusSizeBox.Position = UDim2.new(0.1,0,0,317)
     StatusSizeBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
     StatusSizeBox.Text = "16"
     StatusSizeBox.TextColor3 = Color3.new(1,1,1)
@@ -611,7 +733,7 @@ local function createGUI()
     TeamLabel.TextSize = 14
 
     local TeamScroll = Instance.new("ScrollingFrame", TeamPage)
-    TeamScroll.Size = UDim2.new(0.8,0,0,300)
+    TeamScroll.Size = UDim2.new(0.8,0,0,340)
     TeamScroll.Position = UDim2.new(0.1,0,0,40)
     TeamScroll.BackgroundTransparency = 0.9
     TeamScroll.CanvasSize = UDim2.new(0,0,0,0)
@@ -655,6 +777,11 @@ local function createGUI()
     makeTeamCheckButton("Check Team (all)", teamCheck, function(s) teamCheck = s end)
     makeTeamCheckButton("Check Friends", friendCheck, function(s) friendCheck = s end)
 
+    -- NEW: Reveal toggle
+    makeTeamCheckButton("Reveal (Lộ diện)", revealOn, function(s)
+        revealOn = s
+    end)
+
     -- TARGET FRAME
     local TargetFrame = Instance.new("Frame", ScreenGui)
     TargetFrame.Size = UDim2.new(0,220,0,260)
@@ -678,13 +805,6 @@ local function createGUI()
     FOVCircle.Thickness = 2
     FOVCircle.NumSides = 100
     FOVCircle.Filled = false
-
-    MinBtn.MouseButton1Click:Connect(function()
-        MainFrame.Visible = false; OpenBtn.Visible = true
-    end)
-    OpenBtn.MouseButton1Click:Connect(function()
-        MainFrame.Visible = true; OpenBtn.Visible = false
-    end)
 
     local function showPage(page)
         MainPage.Visible = false; SettingPage.Visible = false
@@ -782,13 +902,12 @@ local function createGUI()
         if espBoxes[plr] then pcall(function() espBoxes[plr]:Destroy() end); espBoxes[plr] = nil end
         if espHealthBars[plr] then pcall(function() espHealthBars[plr]:Destroy() end); espHealthBars[plr] = nil end
         if espHealthFills[plr] then pcall(function() espHealthFills[plr]:Destroy() end); espHealthFills[plr] = nil end
+        revealVisibleCache[plr] = nil   -- NEW
         updatePlayerList()
     end)
     updatePlayerList()
 
-    -- ============================================================
     -- CHECK WALL
-    -- ============================================================
     local function buildIgnoreList(targetHead)
         local ignore = {}
         if player.Character then table.insert(ignore, player.Character) end
@@ -911,8 +1030,15 @@ local function createGUI()
         FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
         FOVCircle.Radius = currentFOV
 
+        if aimPartMode == "Silent" and silentGetTarget then
+            local newTarget, partName = silentGetTarget(Camera.CFrame.Position)
+            cachedSilentTarget = newTarget
+            cachedSilentPartName = partName or "Head"
+            cachedSilentTargetTime = tick()
+        end
+
         -- ============ ESP ============
-        if espOn or espBoxOn or espHealthOn then
+        if espOn or espBoxOn or espHealthOn or revealOn then
             espDistance = tonumber(ESPDistBox.Text) or 100
             local myHead = player.Character and player.Character:FindFirstChild("Head")
 
@@ -923,7 +1049,6 @@ local function createGUI()
                     local head = char and char:FindFirstChild("Head")
 
                     if char and humanoid and head and humanoid.Health > 0 and myHead then
-                        -- Check team/friend → ẩn ESP nếu bật
                         local skipESP = false
                         if teamCheck and isSameTeam(player, plr) then skipESP = true end
                         if friendCheck and player:IsFriendsWith(plr.UserId) then skipESP = true end
@@ -938,7 +1063,6 @@ local function createGUI()
                             if dist <= espDistance then
                                 local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
 
-                                -- ESP LINE
                                 if espOn then
                                     if not espLines[plr] then
                                         espLines[plr] = Drawing.new("Line")
@@ -961,8 +1085,8 @@ local function createGUI()
                                     espLines[plr].Visible = false
                                 end
 
-                                -- ESP BOX
-                                if espBoxOn then
+                                -- ============ ESP BOX + REVEAL ============
+                                if espBoxOn or revealOn then
                                     if not espBoxes[plr] then
                                         espBoxes[plr] = Drawing.new("Square")
                                         espBoxes[plr].Thickness = 1
@@ -977,10 +1101,30 @@ local function createGUI()
                                         box.Visible = true
                                         box.Size = Vector2.new(width, height)
                                         box.Position = Vector2.new(screenPos.X - width/2, topPos.Y)
-                                        if player:IsFriendsWith(plr.UserId) then
-                                            box.Color = Color3.fromRGB(0,255,0)
+
+                                        -- REVEAL: check visible (có thể bắn được)
+                                        local isExposed = false
+                                        if revealOn then
+                                            local cache = revealVisibleCache[plr]
+                                            local now = tick()
+                                            if not cache or (now - cache.time) > REVEAL_CACHE_LIFETIME then
+                                                local visible = isVisibleToCamera(head) or isVisibleToCamera(char:FindFirstChild("UpperTorso"))
+                                                revealVisibleCache[plr] = { visible = visible, time = now }
+                                                cache = revealVisibleCache[plr]
+                                            end
+                                            isExposed = cache and cache.visible
+                                        end
+
+                                        -- COLOR LOGIC
+                                        if isExposed then
+                                            box.Color = Color3.fromRGB(0, 255, 0)
+                                            box.Thickness = 2
+                                        elseif player:IsFriendsWith(plr.UserId) then
+                                            box.Color = Color3.fromRGB(0, 200, 0)
+                                            box.Thickness = 1
                                         else
-                                            box.Color = Color3.fromRGB(135,206,250)
+                                            box.Color = Color3.fromRGB(135, 206, 250)
+                                            box.Thickness = 1
                                         end
                                     else
                                         box.Visible = false
@@ -989,7 +1133,6 @@ local function createGUI()
                                     espBoxes[plr].Visible = false
                                 end
 
-                                -- ESP HEALTH BAR
                                 if espHealthOn then
                                     if not espHealthBars[plr] then
                                         espHealthBars[plr] = Drawing.new("Square")
@@ -1053,12 +1196,16 @@ local function createGUI()
         -- ============ AIM ============
         if aimOn then
             if aimPartMode == "Silent" and silentGetTarget then
-                local c = silentGetTarget(Camera.CFrame.Position)
+                local c = cachedSilentTarget
+                if not c or not c.Parent or tick() - cachedSilentTargetTime > CACHE_LIFETIME then
+                    c, cachedSilentPartName = silentGetTarget(Camera.CFrame.Position)
+                end
+
                 if c then
-                    StatusText.Text = "Aim: Đã ngắm (Silent-" .. silentPartMode .. ")"
+                    StatusText.Text = "Đã ngắm"
                     StatusText.TextColor3 = Color3.fromRGB(60, 255, 60)
                 else
-                    StatusText.Text = "Aim: Chưa ngắm (Silent-" .. silentPartMode .. ")"
+                    StatusText.Text = "Chưa ngắm"
                     StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
                 end
             else
@@ -1090,7 +1237,7 @@ local function createGUI()
                     end
 
                     if part then
-                        StatusText.Text = "Aim: Đã ngắm (" .. aimPartMode .. ")"
+                        StatusText.Text = "Đã ngắm"
                         StatusText.TextColor3 = Color3.fromRGB(60, 255, 60)
 
                         local aimPos = part.Position + Vector3.new(0, aimOffsetY, 0)
@@ -1115,14 +1262,17 @@ local function createGUI()
                                 end)
                             end
                         end
+                    else
+                        StatusText.Text = "Chưa ngắm"
+                        StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
                     end
                 else
-                    StatusText.Text = "Aim: Chưa ngắm (" .. aimPartMode .. ")"
+                    StatusText.Text = "Chưa ngắm"
                     StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
                 end
             end
         else
-            StatusText.Text = "Aim: OFF"
+            StatusText.Text = "Chưa ngắm"
             StatusText.TextColor3 = Color3.fromRGB(255, 60, 60)
         end
     end)
