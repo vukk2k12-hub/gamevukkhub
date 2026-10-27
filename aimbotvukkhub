@@ -1,5 +1,5 @@
 -- ============================================================
--- AimHead vuhub (FULL FINAL - Silent 3 mode + Random %H/%B + ESP + Reveal)
+-- AimHead vuhub (UPGRADED - Silent Aim Fix Damage)
 -- ============================================================
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -29,7 +29,6 @@ local espHealthBars = {}
 local espHealthFills = {}
 local espDistance = 100
 
--- NEW: Reveal mode
 local revealOn = false
 local revealVisibleCache = {}
 local REVEAL_CACHE_LIFETIME = 0.1
@@ -41,11 +40,10 @@ local aimRange = 0
 
 -- ==== AIM MODE ====
 local aimPartMode = "Head"
-local silentPartMode = "Body"   -- "Body" | "Head" | "Random"
+local silentPartMode = "Body"
 local aimOffsetY  = 0
 local INSTANT_AIM = true
 
--- ==== % cho mode Random ====
 local silentHeadPercent = 80
 local silentBodyPercent = 20
 
@@ -53,7 +51,6 @@ local silentBodyPercent = 20
 local statusVisible = true
 local statusSize    = 16
 
--- ==== SHARED FOV ====
 local currentFOV = 100
 
 -- ==== SILENT EXPOSE ====
@@ -64,7 +61,11 @@ local silentGetTarget = nil
 local cachedSilentTarget = nil
 local cachedSilentPartName = "Head"
 local cachedSilentTargetTime = 0
-local CACHE_LIFETIME = 0.004  -- 4ms: fresh mỗi frame, không spam raycast
+-- [UPGRADE] Tăng lifetime lên để cache ổn định hơn, tránh getTarget mỗi frame
+local CACHE_LIFETIME = 0.035  -- ~2 frames @ 60fps
+
+-- [UPGRADE] Hệ số bù độ trễ (0..1). Tăng nếu mạng yếu
+local latencyCompensation = 0.6
 
 -- ============================================================
 -- HOOK TEAM SERVER
@@ -147,7 +148,7 @@ local function isVisibleToCamera(targetPart)
 end
 
 -- ============================================================
--- SILENT AIM (3 mode: Body / Head / Random)
+-- SILENT AIM (UPGRADED)
 -- ============================================================
 local function setupSilentAim()
     if silentAimReady then return true end
@@ -169,17 +170,35 @@ local function setupSilentAim()
     rp.FilterType = Enum.RaycastFilterType.Exclude
     rp.IgnoreWater = true
 
+    -- [UPGRADE] Cache visibility ngắn để tránh raycast dồn dập
+    local visCache = {}
+    local VIS_CACHE_LIFETIME = 0.05
+
     local function isVisible(part)
         local char = player.Character
         if not (char and part) then return false end
+        
+        -- [UPGRADE] Cache check để giảm tải raycast
+        local key = part
+        local now = tick()
+        local c = visCache[key]
+        if c and (now - c.time) < VIS_CACHE_LIFETIME then
+            return c.visible
+        end
 
         local camPos = Camera.CFrame.Position
         rp.FilterDescendantsInstances = {char}
 
         local dir = part.Position - camPos
         local result = Workspace:Raycast(camPos, dir, rp)
-        if not result then return true end
-        if result.Instance:IsDescendantOf(part.Parent) then return true end
+        if not result then
+            visCache[key] = { visible = true, time = now }
+            return true
+        end
+        if result.Instance:IsDescendantOf(part.Parent) then
+            visCache[key] = { visible = true, time = now }
+            return true
+        end
 
         local offsets = {
             Vector3.new(0, 0.5, 0), Vector3.new(0, -0.5, 0),
@@ -189,10 +208,17 @@ local function setupSilentAim()
         for _, off in ipairs(offsets) do
             local d = (part.Position + off) - camPos
             local r = Workspace:Raycast(camPos, d, rp)
-            if not r then return true end
-            if r.Instance:IsDescendantOf(part.Parent) then return true end
+            if not r then
+                visCache[key] = { visible = true, time = now }
+                return true
+            end
+            if r.Instance:IsDescendantOf(part.Parent) then
+                visCache[key] = { visible = true, time = now }
+                return true
+            end
         end
 
+        visCache[key] = { visible = false, time = now }
         return false
     end
 
@@ -204,10 +230,8 @@ local function setupSilentAim()
 
         if mode == "Body" then
             return body, "Body"
-
         elseif mode == "Head" then
             return head, "Head"
-
         elseif mode == "Random" then
             local r = math.random() * 100
             if r < silentHeadPercent then
@@ -229,10 +253,14 @@ local function setupSilentAim()
         for _, plr in next, Players:GetPlayers() do
             if plr == player then continue end
             local char = plr.Character
-            if not char
-                or char:FindFirstChildOfClass("ForceField")
-                or (char:FindFirstChild("Humanoid") and char.Humanoid.Health <= 0)
-            then continue end
+            if not char then continue end
+            if char:FindFirstChildOfClass("ForceField") then continue end
+            
+            -- [UPGRADE] Kiểm tra humanoid + máu chặt chẽ hơn
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if not hum or hum.Health <= 0 then continue end
+            -- [UPGRADE] Bỏ qua nếu đang chết (PlayingDead state)
+            if hum:GetState() == Enum.HumanoidStateType.Dead then continue end
 
             local skip = false
             if friendCheck and player:IsFriendsWith(plr.UserId) then skip = true end
@@ -244,44 +272,72 @@ local function setupSilentAim()
 
             local pos, onScreen = Camera:WorldToViewportPoint(tPart.Position)
             if not onScreen then continue end
-            if not isVisible(tPart) then continue end
-
+            
+            -- [UPGRADE] Chỉ check visibility cho mục tiêu gần, tối ưu
             local distance = (Vector2.new(pos.X, pos.Y)
                 - (isMobile and Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2) or UIS:GetMouseLocation())).Magnitude
-            if distance < cDistance then
-                cPart = tPart
-                cDistance = distance
-                cPartName = partName
-            end
+            if distance >= cDistance then continue end
+            
+            if not isVisible(tPart) then continue end
+
+            cPart = tPart
+            cDistance = distance
+            cPartName = partName
         end
         return cPart, cPartName
     end
 
-    rawset(dmg, "GetYaw", function() return 0 end)
-    rawset(dmg, "GetPitch", function() return 0 end)
+    -- [UPGRADE] ĐÃ XÓA rawset GetYaw/GetPitch — không phá logic gốc
+
+    -- [UPGRADE] Lấy ping một lần mỗi 0.2s (tránh gọi mỗi viên)
+    local cachedPing = 0
+    local lastPingUpdate = 0
+    local function getPing()
+        local now = tick()
+        if now - lastPingUpdate > 0.2 then
+            lastPingUpdate = now
+            local ok, p = pcall(function() return player:GetNetworkPing() end)
+            if ok and type(p) == "number" and p > 0 then
+                cachedPing = p
+            else
+                cachedPing = 0.08  -- fallback an toàn
+            end
+        end
+        return cachedPing
+    end
 
     local old
     old = clonefunction(hookfunction(rawget(dmg, "CheckShoot"), newcclosure(function(origin, plr, ...)
         if plr and plr == player then
             local oPos = origin.Position
+            local now = tick()
 
+            -- [UPGRADE] Chỉ refresh khi cache hết hạn — KHÔNG reset thủ công
             local c, partName = cachedSilentTarget, cachedSilentPartName
-            if not c or not c.Parent or not c.Parent:FindFirstChild("Humanoid") or tick() - cachedSilentTargetTime > CACHE_LIFETIME then
+            if not c or not c.Parent or not c.Parent:FindFirstChild("Humanoid")
+                or (now - cachedSilentTargetTime) > CACHE_LIFETIME then
                 c, partName = getTarget(oPos)
                 cachedSilentTarget = c
-                cachedSilentPartName = partName
-                cachedSilentTargetTime = tick()
+                cachedSilentPartName = partName or "Head"
+                cachedSilentTargetTime = now
             end
 
             if c and c.Parent and c.Parent:FindFirstChild("Humanoid") then
                 local isHead = (partName == "Head")
-                local dir = c.Position - oPos
+
+                -- [UPGRADE] Bù độ trễ: dự đoán vị trí mục tiêu tại thời điểm server nhận
+                local ping = getPing()
+                local velocity = Vector3.zero
+                pcall(function()
+                    velocity = c.AssemblyLinearVelocity or c.Velocity or Vector3.zero
+                end)
+                -- [UPGRADE] Ping của Roblox thường là 1 chiều, nhân 2 để bù RTT
+                local predictTime = ping * 2 * latencyCompensation
+                local predictedPos = c.Position + velocity * predictTime
+
+                local dir = predictedPos - oPos
                 local dist = dir.Magnitude
                 local unitDir = dir.Unit
-
-                -- NEW: reset cache sau mỗi viên → viên sau luôn fresh
-                cachedSilentTarget = nil
-                cachedSilentTargetTime = 0
 
                 return {
                     ["instance"] = c,
@@ -301,12 +357,12 @@ local function setupSilentAim()
 
     silentAimReady = true
     silentGetTarget = getTarget
-    print("[SilentAim] Ready")
+    print("[SilentAim] Ready (UPGRADED with latency compensation)")
     return true
 end
 
 -- ============================================================
--- GUI
+-- GUI (giữ nguyên + thêm slider bù độ trễ)
 -- ============================================================
 local function createGUI()
     if player.PlayerGui:FindFirstChild("BlueSkyAimHeadMenu") then return end
@@ -316,7 +372,7 @@ local function createGUI()
     ScreenGui.ResetOnSpawn = false
     ScreenGui.DisplayOrder = 999
 
-    -- STATUS BANNER
+    -- STATUS BANNER (giữ nguyên)
     local StatusFrame = Instance.new("Frame", ScreenGui)
     StatusFrame.Size = UDim2.new(0, 260, 0, 30)
     StatusFrame.Position = UDim2.new(0.5, -130, 0, 10)
@@ -342,7 +398,7 @@ local function createGUI()
     end
     syncStatusSize()
 
-    -- MAIN FRAME
+    -- MAIN FRAME (giữ nguyên)
     local MainFrame = Instance.new("Frame", ScreenGui)
     MainFrame.Size = UDim2.new(0, 640, 0, 520)
     MainFrame.Position = UDim2.new(0.5, -320, 0.5, -260)
@@ -359,56 +415,37 @@ local function createGUI()
     OpenBtn.TextColor3 = Color3.new(1,1,1)
     OpenBtn.Font = Enum.Font.GothamBold
     OpenBtn.TextSize = 24
-    OpenBtn.Visible = true   -- NEW: luôn hiện
+    OpenBtn.Visible = true
     Instance.new("UICorner", OpenBtn).CornerRadius = UDim.new(1,0)
 
-    -- Drag MainFrame
-    local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
-    MainFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true; dragStart = input.Position; startPos = MainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
-        end
-    end)
-    MainFrame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-    RunService.RenderStepped:Connect(function()
-        if dragging and dragInput then
-            local delta = dragInput.Position - dragStart
-            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+    -- (drag logic giữ nguyên — lược bớt cho gọn)
+    local function makeDraggable(frame, handle)
+        local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+        handle.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true; dragStart = input.Position; startPos = frame.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                end)
+            end
+        end)
+        handle.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+                dragInput = input
+            end
+        end)
+        RunService.RenderStepped:Connect(function()
+            if dragging and dragInput then
+                local delta = dragInput.Position - dragStart
+                frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
                                            startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
+            end
+        end)
+    end
 
-    -- Drag OpenBtn
-    local draggingBtn, dragInputBtn, dragStartBtn, startPosBtn = false, nil, nil, nil
-    OpenBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            draggingBtn = true; dragStartBtn = input.Position; startPosBtn = OpenBtn.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then draggingBtn = false end
-            end)
-        end
-    end)
-    OpenBtn.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInputBtn = input
-        end
-    end)
-    RunService.RenderStepped:Connect(function()
-        if draggingBtn and dragInputBtn then
-            local delta = dragInputBtn.Position - dragStartBtn
-            OpenBtn.Position = UDim2.new(startPosBtn.X.Scale, startPosBtn.X.Offset + delta.X,
-                                          startPosBtn.Y.Scale, startPosBtn.Y.Offset + delta.Y)
-        end
-    end)
+    makeDraggable(MainFrame, MainFrame)
+    makeDraggable(OpenBtn, OpenBtn)
 
-    -- NEW: bỏ MinBtn, chỉ dùng OpenBtn toggle
     OpenBtn.MouseButton1Click:Connect(function()
         MainFrame.Visible = not MainFrame.Visible
     end)
@@ -501,7 +538,7 @@ local function createGUI()
     OffsetLabel.Size = UDim2.new(0.8,0,0,20)
     OffsetLabel.Position = UDim2.new(0.1,0,0,226)
     OffsetLabel.BackgroundTransparency = 1
-    OffsetLabel.Text = "Offset Y (0=đầu, 0.5=lố, -0.5=thấp):"
+    OffsetLabel.Text = "Offset Y:"
     OffsetLabel.TextColor3 = Color3.new(1,1,1)
     OffsetLabel.Font = Enum.Font.GothamBold
     OffsetLabel.TextSize = 12
@@ -593,9 +630,6 @@ local function createGUI()
         silentPartMode = SILENT_MODES[(idx % #SILENT_MODES) + 1]
         SilentPartBtn.Text = "Silent: " .. silentPartMode
         refreshPctVisibility()
-        print("[SilentAim] Mode: " .. silentPartMode
-            .. ((silentPartMode == "Random")
-                and (" ("..silentHeadPercent.."%H/"..silentBodyPercent.."%B)") or ""))
     end)
 
     local function refreshAimPartUI()
@@ -626,7 +660,7 @@ local function createGUI()
 
     refreshAimPartUI()
 
-    -- DISTANCE TAB
+    -- DISTANCE TAB (giữ nguyên + THÊM Ô BÙ ĐỘ TRỄ)
     local DistanceLabel = Instance.new("TextLabel", DistancePage)
     DistanceLabel.Size = UDim2.new(0.8,0,0,30)
     DistanceLabel.Position = UDim2.new(0.1,0,0,10)
@@ -689,12 +723,37 @@ local function createGUI()
     ESPDistBox.TextSize = 16
     Instance.new("UICorner", ESPDistBox).CornerRadius = UDim.new(0,8)
 
-    local AutoFireBtn = makeButton(DistancePage, "Auto Fire: OFF", UDim2.new(0.1,0,0,215))
-    local StatusToggleBtn = makeButton(DistancePage, "Status Banner: ON", UDim2.new(0.1,0,0,255))
+    -- [UPGRADE] Ô bù độ trễ
+    local LatencyLabel = Instance.new("TextLabel", DistancePage)
+    LatencyLabel.Size = UDim2.new(0.8,0,0,20)
+    LatencyLabel.Position = UDim2.new(0.1,0,0,205)
+    LatencyLabel.BackgroundTransparency = 1
+    LatencyLabel.Text = "Bù độ trễ (0.0 - 1.5):"
+    LatencyLabel.TextColor3 = Color3.new(1,1,1)
+    LatencyLabel.Font = Enum.Font.GothamBold
+    LatencyLabel.TextSize = 14
+    LatencyLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local LatencyBox = Instance.new("TextBox", DistancePage)
+    LatencyBox.Size = UDim2.new(0.8,0,0,28)
+    LatencyBox.Position = UDim2.new(0.1,0,0,227)
+    LatencyBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
+    LatencyBox.Text = "0.6"
+    LatencyBox.TextColor3 = Color3.new(1,1,1)
+    LatencyBox.Font = Enum.Font.GothamBold
+    LatencyBox.TextSize = 16
+    Instance.new("UICorner", LatencyBox).CornerRadius = UDim.new(0,8)
+    LatencyBox.FocusLost:Connect(function()
+        latencyCompensation = math.clamp(tonumber(LatencyBox.Text) or 0.6, 0, 1.5)
+        LatencyBox.Text = tostring(latencyCompensation)
+    end)
+
+    local AutoFireBtn = makeButton(DistancePage, "Auto Fire: OFF", UDim2.new(0.1,0,0,265))
+    local StatusToggleBtn = makeButton(DistancePage, "Status Banner: ON", UDim2.new(0.1,0,0,305))
 
     local StatusSizeLabel = Instance.new("TextLabel", DistancePage)
     StatusSizeLabel.Size = UDim2.new(0.8,0,0,20)
-    StatusSizeLabel.Position = UDim2.new(0.1,0,0,295)
+    StatusSizeLabel.Position = UDim2.new(0.1,0,0,345)
     StatusSizeLabel.BackgroundTransparency = 1
     StatusSizeLabel.Text = "Status Banner Size:"
     StatusSizeLabel.TextColor3 = Color3.new(1,1,1)
@@ -704,7 +763,7 @@ local function createGUI()
 
     local StatusSizeBox = Instance.new("TextBox", DistancePage)
     StatusSizeBox.Size = UDim2.new(0.8,0,0,28)
-    StatusSizeBox.Position = UDim2.new(0.1,0,0,317)
+    StatusSizeBox.Position = UDim2.new(0.1,0,0,367)
     StatusSizeBox.BackgroundColor3 = Color3.fromRGB(100,180,255)
     StatusSizeBox.Text = "16"
     StatusSizeBox.TextColor3 = Color3.new(1,1,1)
@@ -722,7 +781,7 @@ local function createGUI()
         StatusFrame.Visible = statusVisible
     end)
 
-    -- TEAM TAB
+    -- TEAM TAB (giữ nguyên)
     local TeamLabel = Instance.new("TextLabel", TeamPage)
     TeamLabel.Size = UDim2.new(0.8,0,0,24)
     TeamLabel.Position = UDim2.new(0.1,0,0,8)
@@ -776,13 +835,11 @@ local function createGUI()
 
     makeTeamCheckButton("Check Team (all)", teamCheck, function(s) teamCheck = s end)
     makeTeamCheckButton("Check Friends", friendCheck, function(s) friendCheck = s end)
-
-    -- NEW: Reveal toggle
     makeTeamCheckButton("Reveal (Lộ diện)", revealOn, function(s)
         revealOn = s
     end)
 
-    -- TARGET FRAME
+    -- TARGET FRAME (giữ nguyên)
     local TargetFrame = Instance.new("Frame", ScreenGui)
     TargetFrame.Size = UDim2.new(0,220,0,260)
     TargetFrame.Position = UDim2.new(0.5,170,0.5,-130)
@@ -902,7 +959,7 @@ local function createGUI()
         if espBoxes[plr] then pcall(function() espBoxes[plr]:Destroy() end); espBoxes[plr] = nil end
         if espHealthBars[plr] then pcall(function() espHealthBars[plr]:Destroy() end); espHealthBars[plr] = nil end
         if espHealthFills[plr] then pcall(function() espHealthFills[plr]:Destroy() end); espHealthFills[plr] = nil end
-        revealVisibleCache[plr] = nil   -- NEW
+        revealVisibleCache[plr] = nil
         updatePlayerList()
     end)
     updatePlayerList()
@@ -1030,11 +1087,18 @@ local function createGUI()
         FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
         FOVCircle.Radius = currentFOV
 
+        -- [UPGRADE] Chỉ cập nhật cache nếu hết hạn — không ghi đè mỗi frame
         if aimPartMode == "Silent" and silentGetTarget then
-            local newTarget, partName = silentGetTarget(Camera.CFrame.Position)
-            cachedSilentTarget = newTarget
-            cachedSilentPartName = partName or "Head"
-            cachedSilentTargetTime = tick()
+            local now = tick()
+            local needRefresh = (not cachedSilentTarget) 
+                or (not cachedSilentTarget.Parent) 
+                or (now - cachedSilentTargetTime) > CACHE_LIFETIME
+            if needRefresh then
+                local newTarget, partName = silentGetTarget(Camera.CFrame.Position)
+                cachedSilentTarget = newTarget
+                cachedSilentPartName = partName or "Head"
+                cachedSilentTargetTime = now
+            end
         end
 
         -- ============ ESP ============
@@ -1085,7 +1149,6 @@ local function createGUI()
                                     espLines[plr].Visible = false
                                 end
 
-                                -- ============ ESP BOX + REVEAL ============
                                 if espBoxOn or revealOn then
                                     if not espBoxes[plr] then
                                         espBoxes[plr] = Drawing.new("Square")
@@ -1102,7 +1165,6 @@ local function createGUI()
                                         box.Size = Vector2.new(width, height)
                                         box.Position = Vector2.new(screenPos.X - width/2, topPos.Y)
 
-                                        -- REVEAL: check visible (có thể bắn được)
                                         local isExposed = false
                                         if revealOn then
                                             local cache = revealVisibleCache[plr]
@@ -1115,7 +1177,6 @@ local function createGUI()
                                             isExposed = cache and cache.visible
                                         end
 
-                                        -- COLOR LOGIC
                                         if isExposed then
                                             box.Color = Color3.fromRGB(0, 255, 0)
                                             box.Thickness = 2
